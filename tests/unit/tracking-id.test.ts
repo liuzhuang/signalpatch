@@ -8,4 +8,8 @@ describe("Tracking ID", () => {
       "2a97cf48-c9c0-4b19-a7ac-fcfb7592de31",
     );
   });
+
+  it("removes surrounding whitespace", () => {
+    expect(normalizeTrackingId(" \ttracking-id\n")).toBe("tracking-id");
+  });
 });
