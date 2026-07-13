@@ -1,0 +1,236 @@
+name: Issue Delivery
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue number containing a validated Issue Contract
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: issue-delivery-${{ inputs.issue_number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.context.outputs.issue_number }}
+      proceed: ${{ steps.context.outputs.proceed }}
+      risk_level: ${{ steps.context.outputs.risk_level }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - id: context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
+          TRIGGER: ${{ github.event_name }}
+        run: |
+          node scripts/controllers/prepare-issue.mjs "$ISSUE_NUMBER" .ai/runs/delivery
+          source_kind=$(node -e 'const c=require("./.ai/runs/delivery/contract.json"); process.stdout.write(c.source.kind)')
+          proceed=true
+          if [[ "$TRIGGER" == "issues" && "$source_kind" == "feedback" ]]; then
+            proceed=false
+          fi
+          risk_level=$(node -e 'const c=require("./.ai/runs/delivery/contract.json"); process.stdout.write(c.riskLevel)')
+          echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+          echo "risk_level=$risk_level" >> "$GITHUB_OUTPUT"
+      - name: Validate Issue Contract
+        run: >-
+          node scripts/ai/validate-json.mjs
+          .ai/schemas/issue-contract.schema.json
+          .ai/runs/delivery/contract.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: issue-${{ steps.context.outputs.issue_number }}-contract
+          path: .ai/runs/delivery
+          retention-days: 7
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.proceed == 'true' && needs.prepare.outputs.risk_level != 'R3'
+    runs-on: [self-hosted, macOS, ARM64, signalpatch]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: issue-${{ needs.prepare.outputs.issue_number }}-contract
+          path: .ai/runs/delivery
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Render Builder prompt
+        run: |
+          node scripts/ai/render-prompt.mjs \
+            --stage build \
+            --contract .ai/runs/delivery/contract.json \
+            --evidence .ai/runs/delivery/issue.json \
+            > .ai/runs/delivery/prompt.md
+      - name: Build with Codex
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+            /Applications/ChatGPT.app/Contents/Resources/codex exec \
+            --ephemeral \
+            --sandbox workspace-write \
+            --output-schema .ai/schemas/delivery-output.schema.json \
+            --output-last-message .ai/runs/delivery/result.json \
+            - < .ai/runs/delivery/prompt.md
+      - name: Enforce paths and risk
+        run: |
+          node scripts/ai/validate-json.mjs \
+            .ai/schemas/delivery-output.schema.json \
+            .ai/runs/delivery/result.json
+          node scripts/ai/validate-diff.mjs \
+            --base HEAD \
+            --contract .ai/runs/delivery/contract.json
+          git diff --binary HEAD -- > .ai/runs/delivery/change.patch
+          test -s .ai/runs/delivery/change.patch
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: issue-${{ needs.prepare.outputs.issue_number }}-build
+          path: |
+            .ai/runs/delivery/change.patch
+            .ai/runs/delivery/result.json
+          retention-days: 7
+
+  analyze-r3:
+    needs: prepare
+    if: needs.prepare.outputs.proceed == 'true' && needs.prepare.outputs.risk_level == 'R3'
+    runs-on: [self-hosted, macOS, ARM64, signalpatch]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: issue-${{ needs.prepare.outputs.issue_number }}-contract
+          path: .ai/runs/delivery
+      - name: Render analysis-only prompt
+        run: |
+          node scripts/ai/render-prompt.mjs \
+            --stage review \
+            --contract .ai/runs/delivery/contract.json \
+            --evidence .ai/runs/delivery/issue.json \
+            > .ai/runs/delivery/r3-prompt.md
+      - name: Analyze R3 Issue with read-only Codex
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+            /Applications/ChatGPT.app/Contents/Resources/codex exec \
+            --ephemeral \
+            --sandbox read-only \
+            --output-schema .ai/schemas/delivery-output.schema.json \
+            --output-last-message .ai/runs/delivery/r3-analysis.json \
+            - < .ai/runs/delivery/r3-prompt.md
+      - name: Validate analysis output
+        run: >-
+          node scripts/ai/validate-json.mjs
+          .ai/schemas/delivery-output.schema.json
+          .ai/runs/delivery/r3-analysis.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: issue-${{ needs.prepare.outputs.issue_number }}-r3-analysis
+          path: .ai/runs/delivery/r3-analysis.json
+          retention-days: 7
+
+  publish-r3:
+    needs: [prepare, analyze-r3]
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: issue-${{ needs.prepare.outputs.issue_number }}-r3-analysis
+          path: .ai/runs/delivery
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SIGNALPATCH_APP_ID }}
+          private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      - name: Publish analysis without modifying code
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh issue comment "${{ needs.prepare.outputs.issue_number }}" \
+            --body-file .ai/runs/delivery/r3-analysis.json
+          gh issue edit "${{ needs.prepare.outputs.issue_number }}" \
+            --remove-label "ai:ready" \
+            --add-label "ai:human-required"
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: issue-${{ needs.prepare.outputs.issue_number }}-contract
+          path: .ai/runs/delivery
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: issue-${{ needs.prepare.outputs.issue_number }}-build
+          path: .ai/runs/delivery
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SIGNALPATCH_APP_ID }}
+          private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      - name: Validate and publish AI branch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE_NUMBER: ${{ needs.prepare.outputs.issue_number }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+        run: |
+          branch="ai/issue-${ISSUE_NUMBER}-delivery"
+          git checkout -b "$branch"
+          git apply --index .ai/runs/delivery/change.patch
+          node scripts/ai/validate-diff.mjs \
+            --base HEAD \
+            --contract .ai/runs/delivery/contract.json
+          git config user.name "signalpatch-automation[bot]"
+          git config user.email "signalpatch-automation[bot]@users.noreply.github.com"
+          git commit -m "fix: deliver SignalPatch issue #${ISSUE_NUMBER}"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --set-upstream origin "$branch"
+          pr_url=$(gh pr create \
+            --draft \
+            --base main \
+            --head "$branch" \
+            --title "AI delivery for #${ISSUE_NUMBER}" \
+            --body "Refs #${ISSUE_NUMBER}")
+          pr_number=$(gh pr view "$pr_url" --json number --jq .number)
+          node scripts/controllers/record-run.mjs \
+            --issue "$ISSUE_NUMBER" \
+            --stage build \
+            --state SUCCEEDED \
+            --head-sha "$(git rev-parse HEAD)" \
+            --pr "$pr_number" \
+            --contract .ai/runs/delivery/contract.json
+          gh issue edit "$ISSUE_NUMBER" --remove-label "ai:ready" --add-label "ai:building"

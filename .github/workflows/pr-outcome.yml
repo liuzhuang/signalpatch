@@ -1,0 +1,346 @@
+name: PR Outcome
+
+on:
+  workflow_run:
+    workflows: [PR Gate]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: pr-outcome-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  trust:
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.verify.outputs.branch }}
+      conclusion: ${{ steps.verify.outputs.conclusion }}
+      head_sha: ${{ steps.verify.outputs.head_sha }}
+      issue_number: ${{ steps.verify.outputs.issue_number }}
+      pr_number: ${{ steps.verify.outputs.pr_number }}
+      risk_level: ${{ steps.verify.outputs.risk_level }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - id: verify
+        env:
+          APP_BOT: ${{ vars.SIGNALPATCH_APP_BOT }}
+          GH_TOKEN: ${{ github.token }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          pr_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/pull_requests")
+          [[ $(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p.length))' "$pr_json") == "1" ]]
+          pr_number=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p[0].number))' "$pr_json")
+          pr=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")
+          branch=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(p.head.ref)' "$pr")
+          head_sha=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(p.head.sha)' "$pr")
+          head_repo=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(p.head.repo.full_name)' "$pr")
+          author=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(p.user.login)' "$pr")
+          [[ "$head_repo" == "$GITHUB_REPOSITORY" ]]
+          [[ "$branch" =~ ^ai/issue-([0-9]+)- ]]
+          issue_number="${BASH_REMATCH[1]}"
+          [[ "$author" == "$APP_BOT" ]]
+          [[ "$head_sha" == "$RUN_HEAD_SHA" ]]
+          node scripts/controllers/prepare-issue.mjs "$issue_number" .ai/runs/outcome
+          risk_level=$(node -e 'const c=require("./.ai/runs/outcome/contract.json"); process.stdout.write(c.riskLevel)')
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "conclusion=$RUN_CONCLUSION" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "risk_level=$risk_level" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: outcome-contract
+          path: .ai/runs/outcome
+          retention-days: 7
+
+  collect-failure:
+    needs: trust
+    if: needs.trust.outputs.conclusion != 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      failure_kind: ${{ steps.classify.outputs.failure_kind }}
+      fingerprint: ${{ steps.classify.outputs.fingerprint }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          mkdir -p .ai/runs/outcome
+          gh run view "$RUN_ID" --log-failed > .ai/runs/outcome/failure.log
+          node scripts/ai/failure-fingerprint.mjs \
+            < .ai/runs/outcome/failure.log \
+            > .ai/runs/outcome/failure.json
+          node scripts/ai/classify-failure.mjs \
+            .ai/runs/outcome/failure.log \
+            > .ai/runs/outcome/classification.json
+          kind=$(node -p 'require("./.ai/runs/outcome/classification.json").kind')
+          fingerprint=$(node -p 'require("./.ai/runs/outcome/failure.json").fingerprint')
+          echo "failure_kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+          if [[ "$kind" == "infrastructure" && "$RUN_ATTEMPT" == "1" ]]; then
+            gh run rerun "$RUN_ID" --failed
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: failure-evidence
+          path: .ai/runs/outcome
+          retention-days: 7
+
+  repair:
+    needs: [trust, collect-failure]
+    if: needs.collect-failure.outputs.failure_kind == 'application'
+    runs-on: [self-hosted, macOS, ARM64, signalpatch]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.trust.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: outcome-contract
+          path: .ai/runs/outcome
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: failure-evidence
+          path: .ai/runs/outcome
+      - name: Enforce bounded Repair
+        env:
+          FINGERPRINT: ${{ needs.collect-failure.outputs.fingerprint }}
+        run: |
+          repair_count=$(($(git rev-list --count origin/main..HEAD) - 1))
+          next_attempt=$((repair_count + 1))
+          node scripts/ai/check-repair-budget.mjs "$next_attempt" "$FINGERPRINT"
+          ! git log --format=%B origin/main..HEAD | grep -Fq "failure:${FINGERPRINT}"
+      - name: Render Repair prompt
+        run: |
+          node scripts/ai/render-prompt.mjs \
+            --stage repair \
+            --contract .ai/runs/outcome/contract.json \
+            --evidence .ai/runs/outcome/failure.json \
+            > .ai/runs/outcome/repair-prompt.md
+      - name: Repair with Codex
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+            /Applications/ChatGPT.app/Contents/Resources/codex exec \
+            --ephemeral \
+            --sandbox workspace-write \
+            --output-schema .ai/schemas/delivery-output.schema.json \
+            --output-last-message .ai/runs/outcome/repair.json \
+            - < .ai/runs/outcome/repair-prompt.md
+      - name: Validate Repair patch
+        run: |
+          node scripts/ai/validate-json.mjs \
+            .ai/schemas/delivery-output.schema.json \
+            .ai/runs/outcome/repair.json
+          node scripts/ai/validate-diff.mjs \
+            --base HEAD \
+            --contract .ai/runs/outcome/contract.json
+          git diff --binary HEAD -- > .ai/runs/outcome/repair.patch
+          test -s .ai/runs/outcome/repair.patch
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: repair-patch
+          path: |
+            .ai/runs/outcome/repair.patch
+            .ai/runs/outcome/repair.json
+          retention-days: 7
+
+  publish-repair:
+    needs: [trust, collect-failure, repair]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.trust.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: outcome-contract
+          path: .ai/runs/outcome
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: repair-patch
+          path: .ai/runs/outcome
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SIGNALPATCH_APP_ID }}
+          private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      - name: Publish validated Repair
+        env:
+          FINGERPRINT: ${{ needs.collect-failure.outputs.fingerprint }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+        run: |
+          attempt=$(git rev-list --count origin/main..HEAD)
+          git apply --index .ai/runs/outcome/repair.patch
+          node scripts/ai/validate-diff.mjs \
+            --base HEAD \
+            --contract .ai/runs/outcome/contract.json
+          git config user.name "signalpatch-automation[bot]"
+          git config user.email "signalpatch-automation[bot]@users.noreply.github.com"
+          git commit -m "fix: bounded AI repair
+
+          failure:${FINGERPRINT}"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin "HEAD:${{ needs.trust.outputs.branch }}"
+          node scripts/controllers/record-run.mjs \
+            --issue "${{ needs.trust.outputs.issue_number }}" \
+            --stage repair \
+            --state SUCCEEDED \
+            --head-sha "$(git rev-parse HEAD)" \
+            --attempt "$attempt" \
+            --pr "${{ needs.trust.outputs.pr_number }}" \
+            --failure-fingerprint "$FINGERPRINT" \
+            --contract .ai/runs/outcome/contract.json
+          gh issue edit "${{ needs.trust.outputs.issue_number }}" --add-label "ai:repairing"
+
+  mark-human-required:
+    needs: [trust, collect-failure, repair]
+    if: always() && needs.collect-failure.outputs.failure_kind == 'application' && needs.repair.result == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SIGNALPATCH_APP_ID }}
+          private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      - name: Stop the bounded Repair loop
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh issue edit "${{ needs.trust.outputs.issue_number }}" --add-label "ai:human-required"
+          gh issue comment "${{ needs.trust.outputs.issue_number }}" --body "The bounded Repair loop stopped because its policy or attempt guard failed. Human review is required."
+
+  finalize:
+    needs: trust
+    if: needs.trust.outputs.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: ${{ needs.trust.outputs.risk_level == 'R2' && 'r2-approval' || 'production' }}
+    permissions:
+      actions: read
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.trust.outputs.head_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: outcome-contract
+          path: .ai/runs/outcome
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pr-${{ needs.trust.outputs.pr_number }}-deployment
+          path: .ai/runs/outcome
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+      - name: Revalidate current PR head before reading write credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${{ needs.trust.outputs.pr_number }}" --jq .head.sha)
+          [[ "$current" == "${{ needs.trust.outputs.head_sha }}" ]]
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SIGNALPATCH_APP_ID }}
+          private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      - name: Merge accepted PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh pr ready "${{ needs.trust.outputs.pr_number }}"
+          gh pr merge "${{ needs.trust.outputs.pr_number }}" \
+            --squash \
+            --match-head-commit "${{ needs.trust.outputs.head_sha }}"
+      - name: Promote the exact accepted deployment
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          deployment_url=$(node -p 'require("./.ai/runs/outcome/deployment.json").deploymentUrl')
+          pnpm exec vercel promote "$deployment_url" --yes --token="$VERCEL_TOKEN"
+          if ! SMOKE_TRACKING_IDS_FILE=.ai/runs/outcome/smoke-tracking-ids.txt \
+            pnpm test:smoke -- --base-url="$PRODUCTION_URL"; then
+            pnpm exec vercel rollback --yes --token="$VERCEL_TOKEN" || true
+            node scripts/controllers/cleanup-smoke.mjs .ai/runs/outcome/smoke-tracking-ids.txt || true
+            node scripts/controllers/record-run.mjs \
+              --issue "${{ needs.trust.outputs.issue_number }}" \
+              --stage production \
+              --state HUMAN_REQUIRED \
+              --head-sha "${{ needs.trust.outputs.head_sha }}" \
+              --pr "${{ needs.trust.outputs.pr_number }}" \
+              --preview-url "$deployment_url" \
+              --production-url "$PRODUCTION_URL" \
+              --contract .ai/runs/outcome/contract.json
+            gh issue edit "${{ needs.trust.outputs.issue_number }}" --add-label "ai:human-required"
+            gh issue comment "${{ needs.trust.outputs.issue_number }}" --body "Production Smoke Test failed. Vercel rollback was requested."
+            exit 1
+          fi
+          node scripts/controllers/cleanup-smoke.mjs .ai/runs/outcome/smoke-tracking-ids.txt
+          node scripts/controllers/record-run.mjs \
+            --issue "${{ needs.trust.outputs.issue_number }}" \
+            --stage production \
+            --state SUCCEEDED \
+            --head-sha "${{ needs.trust.outputs.head_sha }}" \
+            --pr "${{ needs.trust.outputs.pr_number }}" \
+            --preview-url "$deployment_url" \
+            --production-url "$PRODUCTION_URL" \
+            --contract .ai/runs/outcome/contract.json
+          node scripts/controllers/final-comment.mjs \
+            .ai/runs/outcome/contract.json \
+            .ai/runs/outcome/deployment.json \
+            "${{ needs.trust.outputs.pr_number }}" \
+            "${{ needs.trust.outputs.head_sha }}" \
+            "$PRODUCTION_URL" \
+            > .ai/runs/outcome/final-comment.md
+          gh issue comment "${{ needs.trust.outputs.issue_number }}" --body-file .ai/runs/outcome/final-comment.md
+          gh issue edit "${{ needs.trust.outputs.issue_number }}" --add-label "ai:done" --remove-label "ai:building" --remove-label "ai:verifying" --remove-label "ai:repairing"
+          gh issue close "${{ needs.trust.outputs.issue_number }}" --reason completed

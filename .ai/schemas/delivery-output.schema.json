@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stage", "summary", "changedPaths", "verification", "riskLevel"],
+  "properties": {
+    "stage": { "enum": ["build", "review", "repair"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "changedPaths": { "type": "array", "items": { "type": "string" } },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "status"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["passed", "failed", "not-run"] },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "riskLevel": { "enum": ["R0", "R1", "R2", "R3"] },
+    "decision": { "enum": ["APPROVE", "REQUEST_CHANGES", "HUMAN_REQUIRED"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "title", "evidence"],
+        "properties": {
+          "severity": { "enum": ["P0", "P1", "P2", "P3"] },
+          "title": { "type": "string", "minLength": 1 },
+          "evidence": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

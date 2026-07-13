@@ -1,0 +1,57 @@
+version: 1
+
+automation:
+  branch_prefix: ai/issue-
+  max_repair_attempts: 3
+  auto_merge_risks: [R0, R1]
+  human_approval_risks: [R2]
+  analysis_only_risks: [R3]
+
+required_checks:
+  - verify
+  - build
+  - independent-review
+  - preview-smoke
+
+risk_rules:
+  R3:
+    - "**/*secret*"
+    - "**/*private-key*"
+    - "**/iam/**"
+    - "**/auth/**"
+  R2:
+    - ".github/workflows/**"
+    - ".agents/skills/**"
+    - ".ai/**"
+    - "supabase/migrations/**"
+    - "package.json"
+    - "pnpm-lock.yaml"
+    - "next.config.*"
+  R1:
+    - "src/**"
+    - "tests/**"
+  R0:
+    - "README.md"
+    - "docs/**"
+    - "**/*.md"
+
+protected_paths:
+  - ".github/workflows/**"
+  - ".agents/skills/**"
+  - ".ai/policy.yaml"
+  - "supabase/migrations/**"
+  - "package.json"
+  - "pnpm-lock.yaml"
+
+codex:
+  forbidden_environment_variables:
+    - GH_TOKEN
+    - GITHUB_TOKEN
+    - SIGNALPATCH_APP_PRIVATE_KEY
+    - SUPABASE_SERVICE_ROLE_KEY
+    - VERCEL_TOKEN
+  sandboxes:
+    intake: read-only
+    builder: workspace-write
+    reviewer: read-only
+    repair: workspace-write

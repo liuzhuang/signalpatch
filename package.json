@@ -1,0 +1,43 @@
+{
+  "name": "signalpatch",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:smoke": "node scripts/run-smoke.mjs",
+    "validate:sql": "node scripts/ai/validate-sql.mjs supabase/migrations/20260713074941_initial_signalpatch_schema.sql",
+    "validate:workflows": "node scripts/ai/validate-workflows.mjs",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm validate:sql && pnpm validate:workflows"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.110.2",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "ajv": "8.20.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "prettier": "3.9.5",
+    "supabase": "2.109.1",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vercel": "55.0.0",
+    "vitest": "4.1.10",
+    "yaml": "2.9.0"
+  }
+}

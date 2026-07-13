@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue Intake"
+  short_description: "Turn sparse feedback into a verified Issue Contract"
+  default_prompt: "Use $issue-intake to qualify this feedback and produce a SPEC_READY Issue Contract."

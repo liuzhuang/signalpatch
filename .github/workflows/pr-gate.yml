@@ -1,0 +1,179 @@
+name: PR Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: pr-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  trust:
+    runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.verify.outputs.issue_number }}
+      head_sha: ${{ steps.verify.outputs.head_sha }}
+      risk_level: ${{ steps.verify.outputs.risk_level }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - id: verify
+        env:
+          APP_BOT: ${{ vars.SIGNALPATCH_APP_BOT }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          [[ "$HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" ]]
+          [[ "$HEAD_REF" =~ ^ai/issue-([0-9]+)- ]]
+          issue_number="${BASH_REMATCH[1]}"
+          [[ "$PR_AUTHOR" == "$APP_BOT" ]]
+          node scripts/controllers/prepare-issue.mjs "$issue_number" .ai/runs/gate
+          risk_level=$(node -e 'const c=require("./.ai/runs/gate/contract.json"); process.stdout.write(c.riskLevel)')
+          echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "risk_level=$risk_level" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pr-${{ github.event.pull_request.number }}-contract
+          path: .ai/runs/gate
+          retention-days: 7
+
+  verify:
+    needs: trust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.trust.outputs.head_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pr-${{ github.event.pull_request.number }}-contract
+          path: .ai/runs/gate
+      - run: pnpm install --frozen-lockfile
+      - name: Verify
+        run: pnpm verify
+      - name: Build
+        run: pnpm build
+
+  independent-review:
+    needs: trust
+    runs-on: [self-hosted, macOS, ARM64, signalpatch]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.trust.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pr-${{ github.event.pull_request.number }}-contract
+          path: .ai/runs/gate
+      - name: Prepare bounded review evidence
+        run: |
+          git diff --binary origin/main...HEAD -- > .ai/runs/gate/pr.diff
+          node scripts/ai/render-prompt.mjs \
+            --stage review \
+            --contract .ai/runs/gate/contract.json \
+            --evidence .ai/runs/gate/pr.diff \
+            > .ai/runs/gate/review-prompt.md
+      - name: Review with independent Codex
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+            /Applications/ChatGPT.app/Contents/Resources/codex exec \
+            --ephemeral \
+            --sandbox read-only \
+            --output-schema .ai/schemas/delivery-output.schema.json \
+            --output-last-message .ai/runs/gate/review.json \
+            - < .ai/runs/gate/review-prompt.md
+      - name: Require approval
+        run: |
+          node scripts/ai/validate-json.mjs \
+            .ai/schemas/delivery-output.schema.json \
+            .ai/runs/gate/review.json
+          node -e 'const r=require("./.ai/runs/gate/review.json"); if(r.decision!=="APPROVE") process.exit(1)'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pr-${{ github.event.pull_request.number }}-review
+          path: .ai/runs/gate/review.json
+          retention-days: 7
+
+  preview-smoke:
+    needs: [trust, verify, independent-review]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.trust.outputs.head_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pr-${{ github.event.pull_request.number }}-contract
+          path: .ai/runs/gate
+      - run: pnpm install --frozen-lockfile
+      - name: Build staged production artifact once
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          mkdir -p .ai/runs/gate
+          pnpm exec vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          pnpm exec vercel build --prod --token="$VERCEL_TOKEN"
+          deployment_url=$(pnpm exec vercel deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN")
+          DEPLOYMENT_URL="$deployment_url" HEAD_SHA="${{ needs.trust.outputs.head_sha }}" \
+            node -e 'const fs=require("fs"); fs.writeFileSync(".ai/runs/gate/deployment.json", JSON.stringify({deploymentUrl:process.env.DEPLOYMENT_URL,headSha:process.env.HEAD_SHA},null,2)+"\n")'
+      - name: Smoke test staged deployment
+        env:
+          SMOKE_TRACKING_IDS_FILE: .ai/runs/gate/smoke-tracking-ids.txt
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+        run: >-
+          pnpm test:smoke --
+          --base-url="$(node -p 'require("./.ai/runs/gate/deployment.json").deploymentUrl')"
+      - name: Record accepted staged deployment
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+        run: |
+          node scripts/controllers/record-run.mjs \
+            --issue "${{ needs.trust.outputs.issue_number }}" \
+            --stage preview \
+            --state SUCCEEDED \
+            --head-sha "${{ needs.trust.outputs.head_sha }}" \
+            --pr "${{ github.event.pull_request.number }}" \
+            --preview-url "$(node -p 'require("./.ai/runs/gate/deployment.json").deploymentUrl')" \
+            --contract .ai/runs/gate/contract.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pr-${{ github.event.pull_request.number }}-deployment
+          path: |
+            .ai/runs/gate/deployment.json
+            .ai/runs/gate/smoke-tracking-ids.txt
+          retention-days: 7
