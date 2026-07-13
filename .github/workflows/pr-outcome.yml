@@ -151,6 +151,7 @@ jobs:
             - < .ai/runs/outcome/repair-prompt.md
       - name: Validate Repair patch
         run: |
+          git add --intent-to-add -- .
           node scripts/ai/validate-json.mjs \
             .ai/schemas/delivery-output.schema.json \
             .ai/runs/outcome/repair.json
