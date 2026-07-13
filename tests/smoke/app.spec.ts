@@ -8,7 +8,7 @@ test("health endpoint reports the deployed version", async ({ request }) => {
   await expect(response.json()).resolves.toMatchObject({ status: "ok" });
 });
 
-test("anonymous Feedback returns a Tracking ID and exact status", async ({
+test("anonymous Feedback returns the same status for exact and padded Tracking IDs", async ({
   request,
 }) => {
   const submission = await request.post("/api/feedback", {
@@ -40,10 +40,17 @@ test("anonymous Feedback returns a Tracking ID and exact status", async ({
     `/api/status/${encodeURIComponent(body.trackingId)}`,
   );
   expect(status.ok()).toBe(true);
-  await expect(status.json()).resolves.toMatchObject({
+  const exactStatus = await status.json();
+  expect(exactStatus).toMatchObject({
     trackingId: body.trackingId,
     repairStatus: "RECEIVED",
   });
+
+  const paddedStatus = await request.get(
+    `/api/status/${encodeURIComponent(` \t${body.trackingId}\n`)}`,
+  );
+  expect(paddedStatus.ok()).toBe(true);
+  await expect(paddedStatus.json()).resolves.toEqual(exactStatus);
 });
 
 test("unknown Tracking ID remains not found", async ({ request }) => {
