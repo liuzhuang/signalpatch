@@ -27,4 +27,4 @@ Work only from a validated Issue Contract and controller-provided evidence. Neve
 
 ## Stop conditions
 
-Return `HUMAN_REQUIRED` when risk becomes R2 or R3, acceptance criteria conflict, a protected path is required, a security or data risk appears, or controller evidence is insufficient.
+Return `HUMAN_REQUIRED` when risk must be raised above the Issue Contract, the contract is R3, acceptance criteria conflict, a protected path outside `allowedPaths` is required, a security or data risk appears, or controller evidence is insufficient. An already confirmed R2 contract may receive `APPROVE`; its separate human approval still gates merge.
