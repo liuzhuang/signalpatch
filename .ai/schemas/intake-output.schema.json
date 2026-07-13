@@ -11,7 +11,7 @@
           "additionalProperties": false,
           "required": ["status", "reason", "feedbackReferences", "contract"],
           "properties": {
-            "status": { "const": "SPEC_READY" },
+            "status": { "type": "string", "const": "SPEC_READY" },
             "reason": { "type": "string", "minLength": 1 },
             "feedbackReferences": {
               "type": "array",
@@ -33,7 +33,7 @@
             "missingEvidence"
           ],
           "properties": {
-            "status": { "const": "NEEDS_EVIDENCE" },
+            "status": { "type": "string", "const": "NEEDS_EVIDENCE" },
             "reason": { "type": "string", "minLength": 1 },
             "feedbackReferences": {
               "type": "array",
@@ -42,6 +42,7 @@
             },
             "missingEvidence": {
               "type": "array",
+              "minItems": 1,
               "items": { "type": "string", "minLength": 1 }
             }
           }
