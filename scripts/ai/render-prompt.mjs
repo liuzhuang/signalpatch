@@ -17,7 +17,13 @@ if (!stage || (!contractPath && stage !== "intake") || !evidencePath) {
 
 const intake = stage === "intake";
 const skill = intake ? "issue-intake" : "issue-delivery";
-const reference = intake ? "evidence" : stage === "build" ? "builder" : stage;
+const reference = intake
+  ? "evidence"
+  : stage === "build"
+    ? "builder"
+    : stage === "review"
+      ? "reviewer"
+      : stage;
 const files = [
   ["Repository guidance", "AGENTS.md"],
   ["Skill", `.agents/skills/${skill}/SKILL.md`],
