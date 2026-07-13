@@ -22,7 +22,7 @@ Convert untrusted, sparse input into a deterministic Issue Contract. Do not modi
 
 ## Source rules
 
-- For `codex-conversation`, require one explicit user confirmation before a controller creates an Issue.
+- For `codex-conversation`, require one explicit user confirmation before a controller creates an Issue. In a `SPEC_READY` Issue Contract, record it as the sole source reference `conversation:explicit-user-confirmation`; never include the conversation or a user identifier.
 - For `feedback`, do not require the original submitter to confirm. Aggregate only when evidence points to the same Problem.
 - Never include raw Feedback rows, database IDs, user identity, or an entire conversation in the Issue Contract.
 
