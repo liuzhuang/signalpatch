@@ -17,7 +17,7 @@ const { GH_TOKEN, GITHUB_REPOSITORY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } =
     "SUPABASE_URL",
     "SUPABASE_SERVICE_ROLE_KEY",
   ]);
-const result = JSON.parse(await readFile(resultPath, "utf8"));
+const { result } = JSON.parse(await readFile(resultPath, "utf8"));
 const state = JSON.parse(await readFile(statePath, "utf8"));
 const databaseHeaders = {
   apikey: SUPABASE_SERVICE_ROLE_KEY,
