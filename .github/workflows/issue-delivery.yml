@@ -100,6 +100,7 @@ jobs:
             - < .ai/runs/delivery/prompt.md
       - name: Enforce paths and risk
         run: |
+          git add --intent-to-add -- .
           node scripts/ai/validate-json.mjs \
             .ai/schemas/delivery-output.schema.json \
             .ai/runs/delivery/result.json
