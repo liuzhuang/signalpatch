@@ -2,7 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["stage", "summary", "changedPaths", "verification", "riskLevel"],
+  "required": [
+    "stage",
+    "summary",
+    "changedPaths",
+    "verification",
+    "riskLevel",
+    "decision",
+    "findings"
+  ],
   "properties": {
     "stage": { "enum": ["build", "review", "repair"] },
     "summary": { "type": "string", "minLength": 1 },
@@ -12,7 +20,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["command", "status"],
+        "required": ["command", "status", "detail"],
         "properties": {
           "command": { "type": "string", "minLength": 1 },
           "status": { "enum": ["passed", "failed", "not-run"] },

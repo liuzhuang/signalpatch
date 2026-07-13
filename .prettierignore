@@ -2,6 +2,7 @@
 node_modules/
 playwright-report/
 test-results/
+supabase/.temp/
 supabase/config.toml
 supabase/migrations/*.sql
 .env.example

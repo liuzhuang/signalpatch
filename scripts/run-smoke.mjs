@@ -22,7 +22,7 @@ if (!baseURL) {
 }
 
 const require = createRequire(import.meta.url);
-const cli = require.resolve("playwright/cli");
+const cli = require.resolve("@playwright/test/cli");
 const result = spawnSync(process.execPath, [cli, "test", ...args], {
   stdio: "inherit",
   env: { ...process.env, PLAYWRIGHT_BASE_URL: baseURL },
