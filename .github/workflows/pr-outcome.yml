@@ -35,11 +35,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_PULL_REQUESTS: ${{ toJson(github.event.workflow_run.pull_requests) }}
         run: |
-          pr_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/pull_requests")
-          [[ $(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p.length))' "$pr_json") == "1" ]]
-          pr_number=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p[0].number))' "$pr_json")
+          [[ $(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p.length))' "$RUN_PULL_REQUESTS") == "1" ]]
+          pr_number=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p[0].number))' "$RUN_PULL_REQUESTS")
           pr=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")
           branch=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(p.head.ref)' "$pr")
           head_sha=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(p.head.sha)' "$pr")
