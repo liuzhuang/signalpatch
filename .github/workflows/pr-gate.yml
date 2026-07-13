@@ -19,6 +19,7 @@ jobs:
     outputs:
       issue_number: ${{ steps.verify.outputs.issue_number }}
       head_sha: ${{ steps.verify.outputs.head_sha }}
+      mode: ${{ steps.verify.outputs.mode }}
       risk_level: ${{ steps.verify.outputs.risk_level }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -32,17 +33,27 @@ jobs:
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           [[ "$HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" ]]
-          [[ "$HEAD_REF" =~ ^ai/issue-([0-9]+)- ]]
-          issue_number="${BASH_REMATCH[1]}"
-          [[ "$PR_AUTHOR" == "$APP_BOT" ]]
-          node scripts/controllers/prepare-issue.mjs "$issue_number" .ai/runs/gate
-          risk_level=$(node -e 'const c=require("./.ai/runs/gate/contract.json"); process.stdout.write(c.riskLevel)')
-          echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          if [[ "$HEAD_REF" =~ ^ai/issue-([0-9]+)- ]] && [[ "$PR_AUTHOR" == "$APP_BOT" ]]; then
+            mode=automation
+            issue_number="${BASH_REMATCH[1]}"
+            node scripts/controllers/prepare-issue.mjs "$issue_number" .ai/runs/gate
+            risk_level=$(node -e 'const c=require("./.ai/runs/gate/contract.json"); process.stdout.write(c.riskLevel)')
+            echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          elif [[ "$HEAD_REF" =~ ^codex/ ]] && [[ "$PR_AUTHOR" == "$REPOSITORY_OWNER" ]]; then
+            mode=manual
+            risk_level=R2
+          else
+            echo "PR source is not trusted for this gate" >&2
+            exit 1
+          fi
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "risk_level=$risk_level" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.verify.outputs.mode == 'automation'
         with:
           name: pr-${{ github.event.pull_request.number }}-contract
           path: .ai/runs/gate
@@ -63,10 +74,6 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: pr-${{ github.event.pull_request.number }}-contract
-          path: .ai/runs/gate
       - run: pnpm install --frozen-lockfile
       - name: Verify
         run: pnpm verify
@@ -92,6 +99,8 @@ jobs:
 
   independent-review:
     needs: trust
+    if: needs.trust.outputs.mode == 'automation'
+    name: independent-review
     runs-on: [self-hosted, macOS, ARM64, signalpatch]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -135,8 +144,21 @@ jobs:
           path: .ai/runs/gate/review.json
           retention-days: 7
 
+  manual-independent-review:
+    needs: trust
+    if: needs.trust.outputs.mode == 'manual'
+    name: independent-review
+    runs-on: ubuntu-latest
+    environment: r2-approval
+    steps:
+      - name: Confirm independent R2 approval
+        run: true
+
   preview-smoke:
-    needs: [trust, verify, build, independent-review]
+    needs: [trust, verify, build, independent-review, manual-independent-review]
+    if: >-
+      always() && needs.trust.result == 'success' && needs.verify.result == 'success' && needs.build.result == 'success' && ((needs.trust.outputs.mode == 'automation' && needs.independent-review.result == 'success') || (needs.trust.outputs.mode == 'manual' && needs.manual-independent-review.result == 'success'))
+    name: preview-smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -151,6 +173,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: needs.trust.outputs.mode == 'automation'
         with:
           name: pr-${{ github.event.pull_request.number }}-contract
           path: .ai/runs/gate
@@ -176,6 +199,7 @@ jobs:
           pnpm test:smoke --
           --base-url="$(node -p 'require("./.ai/runs/gate/deployment.json").deploymentUrl')"
       - name: Record accepted staged deployment
+        if: needs.trust.outputs.mode == 'automation'
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}

@@ -32,6 +32,25 @@ describe("delivery workflow stage boundaries", () => {
     ).toEqual(["opened", "synchronize", "reopened"]);
   });
 
+  it("keeps manual R2 PRs in the owner-only codex lane", () => {
+    const gate = workflow(".github/workflows/pr-gate.yml");
+    const outcome = workflow(".github/workflows/pr-outcome.yml");
+
+    expect(gate.jobs.trust.steps[1].run).toContain("^codex/");
+    expect(gate.jobs.trust.steps[1].run).toContain(
+      '"$PR_AUTHOR" == "$REPOSITORY_OWNER"',
+    );
+    expect(gate.jobs["manual-independent-review"].environment).toBe(
+      "r2-approval",
+    );
+    expect(gate.jobs["manual-independent-review"].name).toBe(
+      "independent-review",
+    );
+    expect(outcome.jobs.finalize.if).toContain(
+      "needs.trust.outputs.mode == 'automation'",
+    );
+  });
+
   it("limits independent review to evidence available before Preview", () => {
     const guidance = readFileSync(
       ".agents/skills/issue-delivery/references/reviewer.md",
