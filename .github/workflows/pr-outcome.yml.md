@@ -14,10 +14,10 @@
 
 Workflow 拆成 **trust** 与两条互斥主路径：
 
-| Gate 结论 | automation PR | manual `codex/*` PR |
-|-----------|---------------|---------------------|
-| **success** | **finalize**：合并、promote、Production Smoke、关 Issue | trust 成功即结束（**不** finalize） |
-| **failure** | **collect-failure → repair → publish-repair**（或基础设施重跑 Gate） | trust 成功即结束（**不** Repair） |
+| Gate 结论   | automation PR                                                        | manual `codex/*` PR                 |
+| ----------- | -------------------------------------------------------------------- | ----------------------------------- |
+| **success** | **finalize**：合并、promote、Production Smoke、关 Issue              | trust 成功即结束（**不** finalize） |
+| **failure** | **collect-failure → repair → publish-repair**（或基础设施重跑 Gate） | trust 成功即结束（**不** Repair）   |
 
 凭据按 Job 隔离：Repair 的 Codex 在 Mac 上 **workspace-write** 且无外部写凭据；**App Token**、**Vercel**、**Supabase** 仅在 `publish-repair` / `finalize` 等 Ubuntu Job 出现。
 
@@ -43,51 +43,51 @@ flowchart TD
 
 ### 触发与并发
 
-| 项目 | 说明 |
-|------|------|
-| **触发** | `workflow_run`：`workflows: [PR Gate]`，`types: [completed]` |
-| **注意** | 监听的是 workflow **`name:`** `PR Gate`，不是文件 `pr-gate.yml` |
-| **何时触发** | Gate **成功、失败或取消** 都会触发；Outcome 内再分支 |
-| **并发** | `group: pr-outcome-${{ workflow_run.id }}`，`cancel-in-progress: false` |
-| **含义** | 一次 Gate Run 对应一次 Outcome；Repair  push 后产生**新** Gate Run |
+| 项目         | 说明                                                                    |
+| ------------ | ----------------------------------------------------------------------- |
+| **触发**     | `workflow_run`：`workflows: [PR Gate]`，`types: [completed]`            |
+| **注意**     | 监听的是 workflow **`name:`** `PR Gate`，不是文件 `pr-gate.yml`         |
+| **何时触发** | Gate **成功、失败或取消** 都会触发；Outcome 内再分支                    |
+| **并发**     | `group: pr-outcome-${{ workflow_run.id }}`，`cancel-in-progress: false` |
+| **含义**     | 一次 Gate Run 对应一次 Outcome；Repair push 后产生**新** Gate Run       |
 
 ### 为什么单独一个 Workflow
 
-| | **pr-gate.yml** | **pr-outcome.yml** |
-|--|-----------------|---------------------|
-| **Codex** | 只读 Reviewer | workspace-write Repair |
-| **写操作** | 无合并/无 promote | 合并 PR、push Repair、Issue 评论/关闭 |
-| **凭据** | Vercel/Supabase 仅在 preview-smoke | App Token、Vercel promote、Supabase 写 |
+|            | **pr-gate.yml**                    | **pr-outcome.yml**                     |
+| ---------- | ---------------------------------- | -------------------------------------- |
+| **Codex**  | 只读 Reviewer                      | workspace-write Repair                 |
+| **写操作** | 无合并/无 promote                  | 合并 PR、push Repair、Issue 评论/关闭  |
+| **凭据**   | Vercel/Supabase 仅在 preview-smoke | App Token、Vercel promote、Supabase 写 |
 
 Gate 与 Outcome 拆分，避免 Reviewer/Repair 步骤继承合并与部署密钥。
 
 ### Job 总览
 
-| Job | Runner | 用途（一句话） | 何时跳过 |
-|-----|--------|----------------|----------|
-| **trust** | `ubuntu-latest` | 重验 PR、定 `mode`/`conclusion`、拉 Contract | 从不跳过 |
-| **collect-failure** | `ubuntu-latest` | 失败日志、指纹、分类；基础设施可重跑 Gate | 非 automation 或 Gate 成功 |
-| **repair** | 自托管 macOS | Codex 修代码，生成 repair.patch | 非 application 失败 |
-| **publish-repair** | `ubuntu-latest` | 应用 patch、push 原分支、record-run | repair 未成功 |
-| **mark-human-required** | `ubuntu-latest` | Repair 失败 → Issue 转人工 | repair 成功或未跑 application Repair |
-| **finalize** | `ubuntu-latest` + Environment | 合并、promote、Production Smoke、关 Issue | 非 automation 或 Gate 未成功 |
+| Job                     | Runner                        | 用途（一句话）                               | 何时跳过                             |
+| ----------------------- | ----------------------------- | -------------------------------------------- | ------------------------------------ |
+| **trust**               | `ubuntu-latest`               | 重验 PR、定 `mode`/`conclusion`、拉 Contract | 从不跳过                             |
+| **collect-failure**     | `ubuntu-latest`               | 失败日志、指纹、分类；基础设施可重跑 Gate    | 非 automation 或 Gate 成功           |
+| **repair**              | 自托管 macOS                  | Codex 修代码，生成 repair.patch              | 非 application 失败                  |
+| **publish-repair**      | `ubuntu-latest`               | 应用 patch、push 原分支、record-run          | repair 未成功                        |
+| **mark-human-required** | `ubuntu-latest`               | Repair 失败 → Issue 转人工                   | repair 成功或未跑 application Repair |
+| **finalize**            | `ubuntu-latest` + Environment | 合并、promote、Production Smoke、关 Issue    | 非 automation 或 Gate 未成功         |
 
 ### Job 之间如何传参
 
-| 从 | 到 | 机制 | 传递内容 |
-|----|-----|------|----------|
-| PR Gate Run | trust | `github.event.workflow_run` | `conclusion`、`head_sha`、`pull_requests` |
-| trust | finalize / repair 链 | Job outputs | `mode`、`conclusion`、`pr_number`、`issue_number`、`head_sha`、`branch`、`risk_level` |
-| trust | 下游 | Artifact `outcome-contract` | Contract（automation） |
-| PR Gate preview-smoke | finalize | Artifact `pr-{n}-deployment`（跨 run 下载） | `deployment.json`、`smoke-tracking-ids.txt` |
-| collect-failure | repair | Artifact `failure-evidence` | `failure.log`、`failure.json`、`classification.json` |
-| repair | publish-repair | Artifact `repair-patch` | `repair.patch`、`repair.json` |
+| 从                    | 到                   | 机制                                        | 传递内容                                                                              |
+| --------------------- | -------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------- |
+| PR Gate Run           | trust                | `github.event.workflow_run`                 | `conclusion`、`head_sha`、`pull_requests`                                             |
+| trust                 | finalize / repair 链 | Job outputs                                 | `mode`、`conclusion`、`pr_number`、`issue_number`、`head_sha`、`branch`、`risk_level` |
+| trust                 | 下游                 | Artifact `outcome-contract`                 | Contract（automation）                                                                |
+| PR Gate preview-smoke | finalize             | Artifact `pr-{n}-deployment`（跨 run 下载） | `deployment.json`、`smoke-tracking-ids.txt`                                           |
+| collect-failure       | repair               | Artifact `failure-evidence`                 | `failure.log`、`failure.json`、`classification.json`                                  |
+| repair                | publish-repair       | Artifact `repair-patch`                     | `repair.patch`、`repair.json`                                                         |
 
-| Artifact | 产出 Job | 保留 |
-|----------|----------|------|
+| Artifact           | 产出 Job            | 保留 |
+| ------------------ | ------------------- | ---- |
 | `outcome-contract` | trust（automation） | 7 天 |
-| `failure-evidence` | collect-failure | 7 天 |
-| `repair-patch` | repair | 7 天 |
+| `failure-evidence` | collect-failure     | 7 天 |
+| `repair-patch`     | repair              | 7 天 |
 
 ---
 
@@ -111,27 +111,27 @@ pr=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")
 
 **步骤 2：与 Gate Run 对齐**
 
-| 检查 | 条件 |
-|------|------|
-| 非 Fork | `head.repo.full_name == GITHUB_REPOSITORY` |
-| SHA 一致 | `pr.head.sha == workflow_run.head_sha` |
+| 检查     | 条件                                       |
+| -------- | ------------------------------------------ |
+| 非 Fork  | `head.repo.full_name == GITHUB_REPOSITORY` |
+| SHA 一致 | `pr.head.sha == workflow_run.head_sha`     |
 
 **步骤 3：mode 判定**（同 pr-gate）
 
-| 条件 | `mode` | 后续 |
-|------|--------|------|
-| `ai/issue-{n}-*` + App Bot | `automation` | `prepare-issue.mjs` → `risk_level` |
-| `codex/*` + owner | `manual` | `risk_level=R2`，**无** Contract Artifact |
-| 其它 | — | `exit 1` |
+| 条件                       | `mode`       | 后续                                      |
+| -------------------------- | ------------ | ----------------------------------------- |
+| `ai/issue-{n}-*` + App Bot | `automation` | `prepare-issue.mjs` → `risk_level`        |
+| `codex/*` + owner          | `manual`     | `risk_level=R2`，**无** Contract Artifact |
+| 其它                       | —            | `exit 1`                                  |
 
 **步骤 4：Job outputs**
 
-| Output | 含义 |
-|--------|------|
-| `conclusion` | Gate Run 的 `success` / `failure` / `cancelled` 等 |
-| `head_sha` / `branch` / `pr_number` | 当前 PR 状态 |
-| `issue_number` | automation 时从分支解析 |
-| `mode` / `risk_level` | 路径与合并策略 |
+| Output                              | 含义                                               |
+| ----------------------------------- | -------------------------------------------------- |
+| `conclusion`                        | Gate Run 的 `success` / `failure` / `cancelled` 等 |
+| `head_sha` / `branch` / `pr_number` | 当前 PR 状态                                       |
+| `issue_number`                      | automation 时从分支解析                            |
+| `mode` / `risk_level`               | 路径与合并策略                                     |
 
 automation 时上传 Artifact **`outcome-contract`**（`.ai/runs/outcome`）。
 
@@ -162,10 +162,10 @@ gh run view "$RUN_ID" --log-failed > .ai/runs/outcome/failure.log
 
 **3. [`classify-failure.mjs`](../../scripts/ai/classify-failure.mjs)**
 
-| `kind` | 含义 | 典型匹配 |
-|--------|------|----------|
+| `kind`               | 含义                         | 典型匹配                                                            |
+| -------------------- | ---------------------------- | ------------------------------------------------------------------- |
 | **`infrastructure`** | Runner/网络/Actions 临时故障 | `runner lost communication`、`econnreset`、`service unavailable` 等 |
-| **`application`** | 测试/代码/审查失败 | 无基础设施模式命中 |
+| **`application`**    | 测试/代码/审查失败           | 无基础设施模式命中                                                  |
 
 **4. 基础设施重跑**（仅 `kind==infrastructure` 且 `run_attempt==1`）
 
@@ -177,10 +177,10 @@ gh run rerun "$RUN_ID" --failed
 
 #### Job outputs
 
-| Output | 值 |
-|--------|-----|
+| Output         | 值                               |
+| -------------- | -------------------------------- |
 | `failure_kind` | `infrastructure` / `application` |
-| `fingerprint` | 稳定哈希 |
+| `fingerprint`  | 稳定哈希                         |
 
 上传 Artifact **`failure-evidence`**。
 
@@ -205,11 +205,11 @@ node scripts/ai/check-repair-budget.mjs "$next_attempt" "$FINGERPRINT"
 
 [`check-repair-budget.mjs`](../../scripts/ai/check-repair-budget.mjs) 规则：
 
-| 条件 | 结果 |
-|------|------|
-| `attempt` 不在 1–3 | 拒绝，`repair-attempt-out-of-range` |
+| 条件                          | 结果                                 |
+| ----------------------------- | ------------------------------------ |
+| `attempt` 不在 1–3            | 拒绝，`repair-attempt-out-of-range`  |
 | 与 `previousFingerprint` 相同 | 拒绝，`repeated-failure-fingerprint` |
-| 无有效改动且 attempt>1 | 拒绝，`no-effective-change` |
+| 无有效改动且 attempt>1        | 拒绝，`no-effective-change`          |
 
 提交历史里已有 `failure:{fingerprint}` 则**不再**调用 Codex（重复指纹停止）。
 
@@ -287,10 +287,10 @@ if: always() && mode == automation && failure_kind == application && needs.repai
 environment: ${{ risk_level == 'R2' && 'r2-approval' || 'production' }}
 ```
 
-| `risk_level` | Environment |
-|--------------|-------------|
-| **R0 / R1** | `production` |
-| **R2** | **`r2-approval`**（须人工批准后才继续 merge/promote） |
+| `risk_level` | Environment                                           |
+| ------------ | ----------------------------------------------------- |
+| **R0 / R1**  | `production`                                          |
+| **R2**       | **`r2-approval`**（须人工批准后才继续 merge/promote） |
 
 #### 执行流程
 
@@ -322,10 +322,10 @@ pnpm exec vercel promote "$deployment_url" --yes
 pnpm test:smoke -- --base-url="$PRODUCTION_URL"
 ```
 
-| 结果 | 行为 |
-|------|------|
+| 结果                      | 行为                                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | **Production Smoke 失败** | `vercel rollback`；`cleanup-smoke.mjs`；`record-run` `HUMAN_REQUIRED`；Issue **`ai:human-required`**；**不关** Issue |
-| **成功** | `cleanup-smoke.mjs`；`record-run` `production` `SUCCEEDED`（Repair Status **`RELEASED`**） |
+| **成功**                  | `cleanup-smoke.mjs`；`record-run` `production` `SUCCEEDED`（Repair Status **`RELEASED`**）                           |
 
 **5. 关闭 Issue**
 
@@ -354,21 +354,21 @@ gh issue close ... --reason completed
 
 ### workflow_run 为什么监听 PR Gate
 
-| 项目 | 说明 |
-|------|------|
-| **不是 PR 事件** | Outcome 在 **整轮 Gate 结束** 后统一决策，而非每个 check 单独触发 |
-| **workflow 名称** | 必须是 `workflows: [PR Gate]`（yml 顶部 `name: PR Gate`） |
-| **成功也触发** | 需要 finalize；**失败也触发** — 需要 collect-failure / Repair |
-| **取消也触发** | 会产生 Outcome Run，但 trust 后多数 Job 跳过 |
+| 项目              | 说明                                                              |
+| ----------------- | ----------------------------------------------------------------- |
+| **不是 PR 事件**  | Outcome 在 **整轮 Gate 结束** 后统一决策，而非每个 check 单独触发 |
+| **workflow 名称** | 必须是 `workflows: [PR Gate]`（yml 顶部 `name: PR Gate`）         |
+| **成功也触发**    | 需要 finalize；**失败也触发** — 需要 collect-failure / Repair     |
+| **取消也触发**    | 会产生 Outcome Run，但 trust 后多数 Job 跳过                      |
 
 ### mode 与 Outcome 双路径
 
 与 [pr-gate § mode](pr-gate.yml.md#mode-逻辑) 一致；Outcome **行为差异**：
 
-| `mode` | Gate **success** | Gate **failure** |
-|--------|------------------|------------------|
-| **`automation`** | **finalize**（合并+发布） | **collect-failure** → Repair 或重跑 Gate |
-| **`manual`** | trust 成功，**无** finalize | trust 成功，**无** Repair |
+| `mode`           | Gate **success**            | Gate **failure**                         |
+| ---------------- | --------------------------- | ---------------------------------------- |
+| **`automation`** | **finalize**（合并+发布）   | **collect-failure** → Repair 或重跑 Gate |
+| **`manual`**     | trust 成功，**无** finalize | trust 成功，**无** Repair                |
 
 **manual** `codex/*` PR 设计为：人自己合并发布；Outcome **不**替其自动 squash merge 或 promote。
 
@@ -386,13 +386,13 @@ gh issue close ... --reason completed
 
 与 [`.ai/policy.yaml`](../../.ai/policy.yaml) `max_repair_attempts: 3` 及 [AGENTS.md](../../AGENTS.md) 一致：
 
-| 停止原因 | 含义 |
-|----------|------|
-| **repair-attempt-out-of-range** | 已有 3 次 Repair 尝试 |
+| 停止原因                         | 含义                           |
+| -------------------------------- | ------------------------------ |
+| **repair-attempt-out-of-range**  | 已有 3 次 Repair 尝试          |
 | **repeated-failure-fingerprint** | 同一指纹已在 commit 历史中出现 |
-| **no-effective-change** | 上一轮 Repair 无有效 diff |
-| **validate-diff / policy** | patch 越界或风险上调 |
-| **mark-human-required** | repair Job 失败后的显式转人工 |
+| **no-effective-change**          | 上一轮 Repair 无有效 diff      |
+| **validate-diff / policy**       | patch 越界或风险上调           |
+| **mark-human-required**          | repair Job 失败后的显式转人工  |
 
 基础设施失败：**不**进 Repair，首次 attempt 时 **`gh run rerun`** 重跑 Gate。
 
@@ -408,35 +408,35 @@ vercel promote <Gate 的 deploymentUrl>  →  Production Smoke  →  成功则 R
 
 ### conclusion 与下游 Job
 
-| `trust.outputs.conclusion` | 主要下游 |
-|----------------------------|----------|
-| **`success`** | **finalize**（仅 automation） |
-| **非 success** | **collect-failure**（仅 automation） |
-| **`cancelled`** 等 | collect-failure 可能仍跑；Repair 链视分类而定 |
+| `trust.outputs.conclusion` | 主要下游                                      |
+| -------------------------- | --------------------------------------------- |
+| **`success`**              | **finalize**（仅 automation）                 |
+| **非 success**             | **collect-failure**（仅 automation）          |
+| **`cancelled`** 等         | collect-failure 可能仍跑；Repair 链视分类而定 |
 
 ### 与 Issue / Repair Status 的终态
 
-| 阶段 | record-run stage | 用户可见 Repair Status（成功时） |
-|------|------------------|----------------------------------|
-| Repair push | `repair` | `REPAIRING` |
-| Production 成功 | `production` | **`RELEASED`** |
-| Production Smoke 失败 | `production` + `HUMAN_REQUIRED` | **`HUMAN_REQUIRED`** |
+| 阶段                  | record-run stage                | 用户可见 Repair Status（成功时） |
+| --------------------- | ------------------------------- | -------------------------------- |
+| Repair push           | `repair`                        | `REPAIRING`                      |
+| Production 成功       | `production`                    | **`RELEASED`**                   |
+| Production Smoke 失败 | `production` + `HUMAN_REQUIRED` | **`HUMAN_REQUIRED`**             |
 
 Issue 仅在 Production Smoke **成功**后 **`ai:done` + close**。
 
 ### 相关文件
 
-| 文件 | 说明 |
-|------|------|
-| [README.md](README.md) | 全仓库 Workflow 总览 |
-| [pr-gate.yml.md](pr-gate.yml.md) | 上游 Gate |
-| [issue-delivery.yml.md](issue-delivery.yml.md) | 更上游 Delivery |
-| [scripts/README.md](../../scripts/README.md) | 脚本触发矩阵 |
-| [prepare-issue.mjs](../../scripts/controllers/prepare-issue.mjs) | trust 拉 Contract |
-| [record-run.mjs](../../scripts/controllers/record-run.mjs) | repair / production Run |
-| [failure-fingerprint.mjs](../../scripts/ai/failure-fingerprint.mjs) | 失败指纹 |
-| [classify-failure.mjs](../../scripts/ai/classify-failure.mjs) | 基础设施 vs 应用 |
-| [check-repair-budget.mjs](../../scripts/ai/check-repair-budget.mjs) | Repair 次数上限 |
-| [final-comment.mjs](../../scripts/controllers/final-comment.mjs) | 关 Issue 前验收评论 |
-| [cleanup-smoke.mjs](../../scripts/controllers/cleanup-smoke.mjs) | 清理 synthetic Feedback |
-| [docs/codex-manual-operations.md](../../docs/codex-manual-operations.md) | Outcome 运维说明 |
+| 文件                                                                     | 说明                    |
+| ------------------------------------------------------------------------ | ----------------------- |
+| [README.md](README.md)                                                   | 全仓库 Workflow 总览    |
+| [pr-gate.yml.md](pr-gate.yml.md)                                         | 上游 Gate               |
+| [issue-delivery.yml.md](issue-delivery.yml.md)                           | 更上游 Delivery         |
+| [scripts/README.md](../../scripts/README.md)                             | 脚本触发矩阵            |
+| [prepare-issue.mjs](../../scripts/controllers/prepare-issue.mjs)         | trust 拉 Contract       |
+| [record-run.mjs](../../scripts/controllers/record-run.mjs)               | repair / production Run |
+| [failure-fingerprint.mjs](../../scripts/ai/failure-fingerprint.mjs)      | 失败指纹                |
+| [classify-failure.mjs](../../scripts/ai/classify-failure.mjs)            | 基础设施 vs 应用        |
+| [check-repair-budget.mjs](../../scripts/ai/check-repair-budget.mjs)      | Repair 次数上限         |
+| [final-comment.mjs](../../scripts/controllers/final-comment.mjs)         | 关 Issue 前验收评论     |
+| [cleanup-smoke.mjs](../../scripts/controllers/cleanup-smoke.mjs)         | 清理 synthetic Feedback |
+| [docs/codex-manual-operations.md](../../docs/codex-manual-operations.md) | Outcome 运维说明        |

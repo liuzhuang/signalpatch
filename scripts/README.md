@@ -75,7 +75,7 @@ flowchart TD
 | [`intake-collect.mjs`](controllers/intake-collect.mjs)                           | CLI    | 从 Supabase 原子认领一条 `PENDING` Feedback；写出脱敏 `evidence.json` 与控制器 `state.json`                                |
 | [`intake-publish.mjs`](controllers/intake-publish.mjs)                           | CLI    | 创建 raw Issue；`NEEDS_EVIDENCE` 保留 raw，`SPEC_READY` 原地晋升 processed；重复时评论并关闭，否则 dispatch Issue Delivery |
 | [`prepare-issue.mjs`](controllers/prepare-issue.mjs)                             | CLI    | 从 processed GitHub Issue 提取 `signalpatch-contract` 标记块；写出 `contract.json` 与最小 `issue.json`                     |
-| [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)   | CLI    | 校验已确认 Contract；`gh` 有权限时直接发布，否则原子写入本地 `pending/` 队列（`.tmp` → rename）                         |
+| [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)   | CLI    | 校验已确认 Contract；`gh` 有权限时直接发布，否则原子写入本地 `pending/` 队列（`.tmp` → rename）                            |
 | [`publish-conversation-issues.mjs`](controllers/publish-conversation-issues.mjs) | CLI    | 消费本地队列：校验 Request、创建 raw Issue、精确去重、晋升 processed 并 dispatch Issue Delivery                            |
 | [`record-run.mjs`](controllers/record-run.mjs)                                   | CLI    | 幂等写入 Supabase `automation_runs`；按阶段更新 Problem 的 Repair Status                                                   |
 | [`final-comment.mjs`](controllers/final-comment.mjs)                             | CLI    | 生成 Production 验收通过 Issue 评论（PR、Commit、Preview/Production URL、各 Acceptance Criterion）                         |
@@ -91,31 +91,31 @@ flowchart TD
 
 ### 3.1 主表：脚本 → 触发来源
 
-| 脚本                              | 触发来源                              | 具体时机                                                                             | 调用方 / 入口                                         |
-| --------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| `validate-sql.mjs`                | `pnpm verify`                         | 本地开发、PR Gate `verify` Job（经 `pnpm verify` 链）                                | `pnpm validate:sql`                                   |
-| `validate-workflows.mjs`          | `pnpm verify`                         | 同上                                                                                 | `pnpm validate:workflows`                             |
-| `run-smoke.mjs`                   | `pnpm test:smoke`                     | PR Gate `preview-smoke`；PR Outcome `finalize` Production Smoke；本地                | `pnpm test:smoke -- --base-url=...`                   |
-| `intake-collect.mjs`              | Feedback Intake Workflow              | `collect` Job                                                                        | GitHub Actions                                        |
-| `bundle-schema.mjs`               | Feedback Intake Workflow              | `qualify` Job，Codex 调用前                                                          | GitHub Actions                                        |
-| `render-prompt.mjs`               | 多个 Workflow                         | Intake / Builder / Reviewer / Repair（`--stage` 不同）                               | Feedback Intake、Issue Delivery、PR Gate、PR Outcome  |
-| `validate-json.mjs`               | 多个 Workflow                         | Codex 输出后、Contract 提取后                                                        | 同上                                                  |
-| `intake-publish.mjs`              | Feedback Intake Workflow              | `publish` Job                                                                        | GitHub Actions                                        |
-| `enqueue-conversation-issue.mjs`  | Codex（AGENTS.md 授权）               | Issue Intake 确认 Contract 后，先尝试 `gh` 直接发布，无权限时本地 `workspace-write` 入队 | Codex CLI / 开发者手动                         |
-| `publish-conversation-issues.mjs` | Publish Conversation Issues Workflow  | cron 每 5 分钟 / `workflow_dispatch`                                                 | GitHub Actions；亦可本地见 [README.md](../README.md)  |
-| `prepare-issue.mjs`               | Issue Delivery / PR Gate / PR Outcome | `prepare` 或 `trust` Job                                                             | GitHub Actions                                        |
-| `validate-diff.mjs`               | Issue Delivery / PR Outcome           | Builder/Repair 生成 patch 后；publish 应用 patch 前                                  | GitHub Actions                                        |
-| `check-repair-budget.mjs`         | PR Outcome Workflow                   | `repair` Job，调用 Codex 前                                                          | GitHub Actions                                        |
-| `failure-fingerprint.mjs`         | PR Outcome Workflow                   | `collect-failure` Job                                                                | GitHub Actions                                        |
-| `classify-failure.mjs`            | PR Outcome Workflow                   | `collect-failure` Job                                                                | GitHub Actions                                        |
-| `record-run.mjs`                  | Issue Delivery / PR Gate / PR Outcome | build 成功、preview 成功、repair 成功、production 成功或失败                         | GitHub Actions                                        |
-| `final-comment.mjs`               | PR Outcome Workflow                   | `finalize` Job，Production Smoke 通过后                                              | GitHub Actions                                        |
-| `cleanup-smoke.mjs`               | PR Outcome / Runbook                  | Production Smoke 后；运维人工清理                                                    | GitHub Actions；[docs/runbook.md](../docs/runbook.md) |
-| `evaluate-risk.mjs`               | **仅人工 CLI**                        | 调试路径与风险规则                                                                   | 维护者本地，无 Workflow 引用                          |
-| `lib/policy.mjs`                  | 模块 import                           | `validate-diff`、`intake-publish`、`publish-conversation-issues`、`evaluate-risk` 等 | —                                                     |
-| `lib/http.mjs`                    | 模块 import                           | 所有需 Supabase/GitHub HTTP 的 controller                                            | —                                                     |
-| `lib/conversation-issue.mjs`      | 模块 import                           | `enqueue-*`、`publish-conversation-issues`                                           | —                                                     |
-| `lib/run-status.mjs`              | 模块 import                           | `record-run.mjs`                                                                     | —                                                     |
+| 脚本                              | 触发来源                              | 具体时机                                                                                 | 调用方 / 入口                                         |
+| --------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `validate-sql.mjs`                | `pnpm verify`                         | 本地开发、PR Gate `verify` Job（经 `pnpm verify` 链）                                    | `pnpm validate:sql`                                   |
+| `validate-workflows.mjs`          | `pnpm verify`                         | 同上                                                                                     | `pnpm validate:workflows`                             |
+| `run-smoke.mjs`                   | `pnpm test:smoke`                     | PR Gate `preview-smoke`；PR Outcome `finalize` Production Smoke；本地                    | `pnpm test:smoke -- --base-url=...`                   |
+| `intake-collect.mjs`              | Feedback Intake Workflow              | `collect` Job                                                                            | GitHub Actions                                        |
+| `bundle-schema.mjs`               | Feedback Intake Workflow              | `qualify` Job，Codex 调用前                                                              | GitHub Actions                                        |
+| `render-prompt.mjs`               | 多个 Workflow                         | Intake / Builder / Reviewer / Repair（`--stage` 不同）                                   | Feedback Intake、Issue Delivery、PR Gate、PR Outcome  |
+| `validate-json.mjs`               | 多个 Workflow                         | Codex 输出后、Contract 提取后                                                            | 同上                                                  |
+| `intake-publish.mjs`              | Feedback Intake Workflow              | `publish` Job                                                                            | GitHub Actions                                        |
+| `enqueue-conversation-issue.mjs`  | Codex（AGENTS.md 授权）               | Issue Intake 确认 Contract 后，先尝试 `gh` 直接发布，无权限时本地 `workspace-write` 入队 | Codex CLI / 开发者手动                                |
+| `publish-conversation-issues.mjs` | Publish Conversation Issues Workflow  | cron 每 5 分钟 / `workflow_dispatch`                                                     | GitHub Actions；亦可本地见 [README.md](../README.md)  |
+| `prepare-issue.mjs`               | Issue Delivery / PR Gate / PR Outcome | `prepare` 或 `trust` Job                                                                 | GitHub Actions                                        |
+| `validate-diff.mjs`               | Issue Delivery / PR Outcome           | Builder/Repair 生成 patch 后；publish 应用 patch 前                                      | GitHub Actions                                        |
+| `check-repair-budget.mjs`         | PR Outcome Workflow                   | `repair` Job，调用 Codex 前                                                              | GitHub Actions                                        |
+| `failure-fingerprint.mjs`         | PR Outcome Workflow                   | `collect-failure` Job                                                                    | GitHub Actions                                        |
+| `classify-failure.mjs`            | PR Outcome Workflow                   | `collect-failure` Job                                                                    | GitHub Actions                                        |
+| `record-run.mjs`                  | Issue Delivery / PR Gate / PR Outcome | build 成功、preview 成功、repair 成功、production 成功或失败                             | GitHub Actions                                        |
+| `final-comment.mjs`               | PR Outcome Workflow                   | `finalize` Job，Production Smoke 通过后                                                  | GitHub Actions                                        |
+| `cleanup-smoke.mjs`               | PR Outcome / Runbook                  | Production Smoke 后；运维人工清理                                                        | GitHub Actions；[docs/runbook.md](../docs/runbook.md) |
+| `evaluate-risk.mjs`               | **仅人工 CLI**                        | 调试路径与风险规则                                                                       | 维护者本地，无 Workflow 引用                          |
+| `lib/policy.mjs`                  | 模块 import                           | `validate-diff`、`intake-publish`、`publish-conversation-issues`、`evaluate-risk` 等     | —                                                     |
+| `lib/http.mjs`                    | 模块 import                           | 所有需 Supabase/GitHub HTTP 的 controller                                                | —                                                     |
+| `lib/conversation-issue.mjs`      | 模块 import                           | `enqueue-*`、`publish-conversation-issues`                                               | —                                                     |
+| `lib/run-status.mjs`              | 模块 import                           | `record-run.mjs`                                                                         | —                                                     |
 
 ### 3.2 按 Workflow 聚合（Workflow → Job → 脚本）
 
@@ -153,13 +153,13 @@ flowchart TD
 
 ### 4.1 凭据边界
 
-| 脚本 / 组                                                                                                  | 典型环境变量                                          |
-| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `intake-collect.mjs`, `intake-publish.mjs`, `record-run.mjs`, `cleanup-smoke.mjs`                          | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`           |
-| `intake-publish.mjs`, `prepare-issue.mjs`, `publish-conversation-issues.mjs`, `record-run.mjs`（部分步骤） | `GH_TOKEN`（GitHub App Installation Token）           |
-| `run-smoke.mjs`（测试期间）                                                                                | 可选 Supabase（Smoke 写入 synthetic Feedback）        |
+| 脚本 / 组                                                                                                  | 典型环境变量                                                |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `intake-collect.mjs`, `intake-publish.mjs`, `record-run.mjs`, `cleanup-smoke.mjs`                          | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                 |
+| `intake-publish.mjs`, `prepare-issue.mjs`, `publish-conversation-issues.mjs`, `record-run.mjs`（部分步骤） | `GH_TOKEN`（GitHub App Installation Token）                 |
+| `run-smoke.mjs`（测试期间）                                                                                | 可选 Supabase（Smoke 写入 synthetic Feedback）              |
 | `enqueue-conversation-issue.mjs`                                                                           | 本机 `gh` 登录上下文；可选 `SIGNALPATCH_CONVERSATION_QUEUE` |
-| `scripts/ai/*`                                                                                             | **无** GitHub / Supabase / Vercel 写凭据              |
+| `scripts/ai/*`                                                                                             | **无** GitHub / Supabase / Vercel 写凭据                    |
 
 Codex Job 内禁止出现上述写凭据；由 [validate-workflows.mjs](ai/validate-workflows.mjs) 在 `pnpm verify` 中强制检查。
 
