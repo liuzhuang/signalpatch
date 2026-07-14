@@ -369,7 +369,12 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           deployment_url=$(node -p 'require("./.ai/runs/outcome/deployment.json").deploymentUrl')
-          pnpm exec vercel promote "$deployment_url" --yes --token="$VERCEL_TOKEN"
+          promote_status=0
+          promote_output=$(pnpm exec vercel promote "$deployment_url" --yes --token="$VERCEL_TOKEN" 2>&1) || promote_status=$?
+          printf '%s\n' "$promote_output"
+          if [[ "$promote_status" != "0" ]] && ! grep -Fq "already the current production deployment" <<< "$promote_output"; then
+            exit "$promote_status"
+          fi
           if ! SMOKE_TRACKING_IDS_FILE=.ai/runs/outcome/smoke-tracking-ids.txt \
             pnpm test:smoke -- --base-url="$PRODUCTION_URL"; then
             pnpm exec vercel rollback --yes --token="$VERCEL_TOKEN" || true
