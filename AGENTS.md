@@ -19,8 +19,6 @@
 - Intake 生成通过 Schema 校验且经过明确确认的 `codex-conversation` Issue Contract 后，Codex 优先使用 gh 创建 issue，如果gh或者没有权限，就使用 `workspace-write`，通过 `scripts/controllers/enqueue-conversation-issue.mjs` 将该 Contract 加入队列。
 - Automation Run 不得使用 `danger-full-access`。
 - 不得向 Codex 暴露 GitHub、Supabase Service Role、Vercel 或部署凭据。
-- 不得让 Codex 执行 push、合并、部署或调用外部写 API；Issue Contract 仅可由 `enqueue-conversation-issue.mjs` 按 gh 权限检查直接发布，或在无权限时写入受控队列。评论等其他外部写操作仍由确定性 Controller 负责。
-- 不得通过削弱测试、策略、必要检查或受保护路径来让 Automation Run 通过。
 
 ## 命令
 
