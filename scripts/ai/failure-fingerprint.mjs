@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】从 stdin 读取失败日志，规范化后输出稳定 SHA256 指纹与截断摘要
+// 【何时跑】pr-outcome.yml collect-failure Job
 import { createHash } from "node:crypto";
 
 let input = "";

@@ -1,6 +1,8 @@
 name: PR Outcome
 
-# 只消费已完成的 PR Gate。workflow_run 拥有目标分支权限，因此必须先重新验证关联 PR、作者和 Head SHA。
+# 【做什么】PR Gate 结束后：全绿则合并+上生产+关 Issue；失败则自动修 PR（最多约 3 次）或转人工
+# 【何时跑】名为「PR Gate」的 workflow 跑完时（监听 workflow_run，不是 PR 事件本身）
+# 【详见】.github/workflows/README.md
 on:
   workflow_run:
     workflows: [PR Gate]
@@ -34,6 +36,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+      # 实时 gh api 查 PR：校验 pull_requests 长度为 1、非 Fork、head.sha 与 workflow_run.head_sha 一致。
       - id: verify
         env:
           APP_BOT: ${{ vars.SIGNALPATCH_APP_BOT }}
@@ -75,6 +78,7 @@ jobs:
           fi
           echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
           echo "risk_level=$risk_level" >> "$GITHUB_OUTPUT"
+      # finalize / repair 链需要 Contract；conclusion 决定走成功路径还是 collect-failure。
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: steps.verify.outputs.mode == 'automation'
         with:
@@ -82,7 +86,7 @@ jobs:
           path: .ai/runs/outcome
           retention-days: 7
 
-  # 只处理自动化 PR 的失败 Gate：压缩失败日志，生成稳定指纹，并区分基础设施与应用失败。
+  # 只处理 automation 且 Gate 非 success：拉失败日志、算指纹、区分基础设施 vs 应用失败。
   collect-failure:
     needs: trust
     if: needs.trust.outputs.mode == 'automation' && needs.trust.outputs.conclusion != 'success'
@@ -97,6 +101,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+      # failure-fingerprint.mjs 规范化日志后 SHA256；classify-failure.mjs 决定是否应重跑 Gate 而非 Repair。
       - id: classify
         env:
           GH_TOKEN: ${{ github.token }}
@@ -131,6 +136,7 @@ jobs:
     if: needs.trust.outputs.mode == 'automation' && needs.collect-failure.outputs.failure_kind == 'application'
     runs-on: [self-hosted, macOS, ARM64, signalpatch]
     steps:
+      # 检出 PR tip（非 main），Repair patch 叠加在已有 Delivery+历史 Repair 提交之上。
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ needs.trust.outputs.head_sha }}
@@ -145,6 +151,7 @@ jobs:
         with:
           name: failure-evidence
           path: .ai/runs/outcome
+      # check-repair-budget：attempt 1-3；提交历史含相同 failure: 指纹则不再调用 Codex。
       - name: Enforce bounded Repair
         env:
           FINGERPRINT: ${{ needs.collect-failure.outputs.fingerprint }}
@@ -153,8 +160,8 @@ jobs:
           repair_count=$(($(git rev-list --count origin/main..HEAD) - 1))
           next_attempt=$((repair_count + 1))
           node scripts/ai/check-repair-budget.mjs "$next_attempt" "$FINGERPRINT"
-          # 每次 Repair 把失败指纹写入提交信息；同一指纹再次出现时在调用模型前停止循环。
           ! git log --format=%B origin/main..HEAD | grep -Fq "failure:${FINGERPRINT}"
+      # failure.json 含截断日志摘要，作为 Repair Prompt 的 evidence。
       - name: Render Repair prompt
         run: |
           node scripts/ai/render-prompt.mjs \
@@ -164,7 +171,6 @@ jobs:
             > .ai/runs/outcome/repair-prompt.md
       - name: Repair with Codex
         run: |
-          # env -i 阻断 Runner 上的 GitHub、Supabase 和 Vercel 环境，只保留本地 Codex 登录。
           env -i \
             HOME="$HOME" \
             PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
@@ -176,7 +182,6 @@ jobs:
             - < .ai/runs/outcome/repair-prompt.md
       - name: Validate Repair patch
         run: |
-          # 新文件也必须进入 Diff；空 Patch、越界路径或风险升级都会在上传 Artifact 前失败。
           git add --intent-to-add -- .
           node scripts/ai/validate-json.mjs \
             .ai/schemas/delivery-output.schema.json \
@@ -229,6 +234,7 @@ jobs:
         with:
           app-id: ${{ vars.SIGNALPATCH_APP_ID }}
           private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      # commit body 含 failure:{fingerprint}；push 到 trust 记录的 branch 会触发新的 PR Gate synchronize。
       - name: Publish validated Repair
         env:
           FINGERPRINT: ${{ needs.collect-failure.outputs.fingerprint }}
@@ -279,7 +285,7 @@ jobs:
           gh issue edit "${{ needs.trust.outputs.issue_number }}" --add-label "ai:human-required"
           gh issue comment "${{ needs.trust.outputs.issue_number }}" --body "The bounded Repair loop stopped because its policy or attempt guard failed. Human review is required."
 
-  # 仅自动化 PR 且 Gate 全绿才合并发布；R2 先等待 r2-approval，R0/R1 进入 production 环境。
+  # 仅 automation 且 Gate conclusion=success：合并、promote Gate 已测 Deployment、Production Smoke、关 Issue。
   finalize:
     needs: trust
     if: needs.trust.outputs.mode == 'automation' && needs.trust.outputs.conclusion == 'success'
@@ -307,6 +313,7 @@ jobs:
         with:
           name: outcome-contract
           path: .ai/runs/outcome
+      # 从触发本 Outcome 的那次 PR Gate Run 下载 preview-smoke 产物（非当前 Run 的 Artifact）。
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: pr-${{ needs.trust.outputs.pr_number }}-deployment
@@ -314,11 +321,11 @@ jobs:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ github.event.workflow_run.id }}
+      # 防止 Gate 结束后 PR 又被 push：若 head 已变，不签发 App Token 做 merge/promote。
       - name: Revalidate current PR head before reading write credentials
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Artifact 下载后再次查询实时 Head；若 PR 已被追加提交，后续 App Token 步骤不会执行。
           current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${{ needs.trust.outputs.pr_number }}" --jq .head.sha)
           [[ "$current" == "${{ needs.trust.outputs.head_sha }}" ]]
       - id: app-token
@@ -326,6 +333,7 @@ jobs:
         with:
           app-id: ${{ vars.SIGNALPATCH_APP_ID }}
           private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      # Draft PR → Ready → squash merge，--match-head-commit 保证合的是 Gate 验过的 SHA。
       - name: Merge accepted PR
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -334,6 +342,7 @@ jobs:
           gh pr merge "${{ needs.trust.outputs.pr_number }}" \
             --squash \
             --match-head-commit "${{ needs.trust.outputs.head_sha }}"
+      # promote 同一 deploymentUrl；Production Smoke 失败则 rollback + HUMAN_REQUIRED，不关 Issue。
       - name: Promote the exact accepted deployment
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -344,10 +353,8 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          # 提升 PR Gate 已通过 Smoke Test 的原 Deployment，不从合并后的 main 重新构建另一份产物。
           deployment_url=$(node -p 'require("./.ai/runs/outcome/deployment.json").deploymentUrl')
           pnpm exec vercel promote "$deployment_url" --yes --token="$VERCEL_TOKEN"
-          # 生产 Smoke 失败立即请求回滚、清理合成数据并保留 Issue 给人工，不会写 ai:done 或关闭 Issue。
           if ! SMOKE_TRACKING_IDS_FILE=.ai/runs/outcome/smoke-tracking-ids.txt \
             pnpm test:smoke -- --base-url="$PRODUCTION_URL"; then
             pnpm exec vercel rollback --yes --token="$VERCEL_TOKEN" || true

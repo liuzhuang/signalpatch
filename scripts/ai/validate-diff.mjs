@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】检查 git diff：是否在 Contract 允许路径内、是否触碰保护路径、风险是否被上调
+// 【何时跑】issue-delivery build/publish；pr-outcome repair/publish-repair
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 

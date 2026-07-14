@@ -1,3 +1,5 @@
+// 【做什么】加载 .ai/policy.yaml，提供路径 glob 匹配、requiredRisk 与 policyViolations
+// 【说明】库模块，无 CLI 入口；被 validate-diff、intake-publish 等 import
 import { readFile } from "node:fs/promises";
 
 import { parse } from "yaml";

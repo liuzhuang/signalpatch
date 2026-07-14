@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】按阶段（intake / build / review / repair）组装 Codex Prompt（AGENTS.md + Skill + 证据）
+// 【何时跑】Feedback Intake、Issue Delivery、PR Gate 审查、PR Outcome Repair 等 Workflow
 import { readFile } from "node:fs/promises";
 
 function option(name) {

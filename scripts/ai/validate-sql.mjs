@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】校验 Supabase 迁移是否包含 signalpatch 必需表/RLS/RPC，并拒绝 public 整库授权
+// 【何时跑】pnpm verify（pnpm validate:sql）
 import { readFile } from "node:fs/promises";
 
 const [migrationPath] = process.argv.slice(2);

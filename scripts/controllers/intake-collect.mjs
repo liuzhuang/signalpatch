@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】从 Supabase 原子认领一条 PENDING Feedback，写出脱敏 evidence 与控制器 state
+// 【何时跑】feedback-intake.yml collect Job
 import { mkdir, writeFile } from "node:fs/promises";
 
 import { requestJson, requireEnvironment } from "./lib/http.mjs";

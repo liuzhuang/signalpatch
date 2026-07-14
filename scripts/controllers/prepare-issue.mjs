@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】从 GitHub Issue 提取 Issue Contract 标记块，写出 contract.json 与 issue 快照
+// 【何时跑】issue-delivery prepare；pr-gate trust；pr-outcome trust
 import { mkdir, writeFile } from "node:fs/promises";
 
 import { requestJson, requireEnvironment } from "./lib/http.mjs";

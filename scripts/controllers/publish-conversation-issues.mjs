@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】消费本地对话队列，校验 Contract 后创建 GitHub Issue（UUID 防重复）
+// 【何时跑】publish-conversation-issues.yml；亦可本地手动（需 GH_TOKEN）
 import {
   mkdir,
   open,

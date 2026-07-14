@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】检查 Repair 尝试次数（≤3）、是否重复失败指纹、是否有有效代码改动
+// 【何时跑】pr-outcome.yml repair Job，调用 Codex 前
 const [
   attemptValue,
   fingerprint,

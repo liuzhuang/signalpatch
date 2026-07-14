@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】校验 .github/workflows/*.yml 的 YAML 结构与本仓库 Workflow 安全规则
+// 【何时跑】pnpm verify（pnpm validate:workflows）
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 

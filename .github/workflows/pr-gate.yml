@@ -1,6 +1,8 @@
 name: PR Gate
 
-# 新建、重新打开或推送新提交都会重跑 Gate；不接受手工 workflow_dispatch，确保上下文来自真实 PR 事件。
+# 【做什么】PR 每次更新跑 verify/build/AI 审查/预览部署+Smoke；PR 上须通过 4 个 Required Checks
+# 【何时跑】PR 打开、重开、或有新 push 时（无手动触发）
+# 【详见】.github/workflows/README.md
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -29,6 +31,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+      # 分支名 ai/issue-{n}-* + App Bot → automation（prepare-issue 拉 Contract）；codex/* + owner → manual(R2)。
       - id: verify
         env:
           APP_BOT: ${{ vars.SIGNALPATCH_APP_BOT }}
@@ -58,6 +61,7 @@ jobs:
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "risk_level=$risk_level" >> "$GITHUB_OUTPUT"
+      # independent-review 与 preview-smoke(record-run) 需要 Contract；manual 路径不上传。
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: steps.verify.outputs.mode == 'automation'
         with:
@@ -70,6 +74,7 @@ jobs:
     needs: trust
     runs-on: ubuntu-latest
     steps:
+      # 固定到 trust 输出的 head_sha，不用默认 merge commit，保证验的是 PR 分支 tip。
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ needs.trust.outputs.head_sha }}
@@ -85,7 +90,7 @@ jobs:
       - name: Verify
         run: pnpm verify
 
-  # Required Check 之一：独立执行生产构建，不能用 verify 成功替代可部署性证明。
+  # Required Check 之二：独立执行生产构建，不能用 verify 成功替代可部署性证明。
   build:
     needs: trust
     runs-on: ubuntu-latest
@@ -122,9 +127,9 @@ jobs:
         with:
           name: pr-${{ github.event.pull_request.number }}-contract
           path: .ai/runs/gate
+      # origin/main...HEAD 三点 diff：Reviewer 只看 PR 净变更，不读完整 Git 历史。
       - name: Prepare bounded review evidence
         run: |
-          # 三点 Diff 只包含 PR 相对 main 的净变化，避免把完整 Git 历史塞进 Reviewer Prompt。
           git diff --binary origin/main...HEAD -- > .ai/runs/gate/pr.diff
           node scripts/ai/render-prompt.mjs \
             --stage review \
@@ -142,6 +147,7 @@ jobs:
             --output-schema .ai/schemas/delivery-output.schema.json \
             --output-last-message .ai/runs/gate/review.json \
             - < .ai/runs/gate/review-prompt.md
+      # decision 必须为 APPROVE；REJECT/REQUEST_CHANGES 会使 Required Check 失败并进入 Outcome Repair 链。
       - name: Require approval
         run: |
           node scripts/ai/validate-json.mjs \
@@ -162,6 +168,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: r2-approval
     steps:
+      # PR 检查名与 automation 路径相同（independent-review），满足 Ruleset 四检查结构。
       - name: Confirm independent R2 approval
         run: true
 
@@ -184,12 +191,14 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # manual 路径无 Issue Contract，preview-smoke 只做部署+Smoke，不写 Supabase Automation Run。
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         if: needs.trust.outputs.mode == 'automation'
         with:
           name: pr-${{ github.event.pull_request.number }}-contract
           path: .ai/runs/gate
       - run: pnpm install --frozen-lockfile
+      # production 环境变量构建 + --skip-domain：得到与生产相同产物，但不切生产域名；URL 写入 deployment.json。
       - name: Build staged production artifact once
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -197,12 +206,12 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           mkdir -p .ai/runs/gate
-          # 使用 production 配置构建一次，但 --skip-domain 暂不接管生产域名；Outcome 成功后提升同一 Deployment。
           pnpm exec vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
           pnpm exec vercel build --prod --token="$VERCEL_TOKEN"
           deployment_url=$(pnpm exec vercel deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN")
           DEPLOYMENT_URL="$deployment_url" HEAD_SHA="${{ needs.trust.outputs.head_sha }}" \
             node -e 'const fs=require("fs"); fs.writeFileSync(".ai/runs/gate/deployment.json", JSON.stringify({deploymentUrl:process.env.DEPLOYMENT_URL,headSha:process.env.HEAD_SHA},null,2)+"\n")'
+      # Playwright Smoke 对 staged URL 跑验收；tracking ID 写入 smoke-tracking-ids.txt 供 Outcome 清理。
       - name: Smoke test staged deployment
         env:
           SMOKE_TRACKING_IDS_FILE: .ai/runs/gate/smoke-tracking-ids.txt
@@ -211,6 +220,7 @@ jobs:
         run: >-
           pnpm test:smoke --
           --base-url="$(node -p 'require("./.ai/runs/gate/deployment.json").deploymentUrl')"
+      # Repair Status → VERIFYING；preview URL 供用户查询，非生产域名。
       - name: Record accepted staged deployment
         if: needs.trust.outputs.mode == 'automation'
         env:
@@ -225,7 +235,7 @@ jobs:
             --pr "${{ github.event.pull_request.number }}" \
             --preview-url "$(node -p 'require("./.ai/runs/gate/deployment.json").deploymentUrl')" \
             --contract .ai/runs/gate/contract.json
-      # Outcome 不重新构建：它下载此 Deployment URL 和 Smoke Test 产生的清理清单后执行精确提升。
+      # pr-outcome finalize 从同一 workflow_run.id 下载此 Artifact 做 vercel promote，不重新 build。
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pr-${{ github.event.pull_request.number }}-deployment

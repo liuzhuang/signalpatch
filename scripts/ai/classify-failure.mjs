@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】把失败日志分为 infrastructure（Runner/网络）或 application（代码/测试）
+// 【何时跑】pr-outcome.yml collect-failure Job
 import { readFile } from "node:fs/promises";
 
 const [logPath] = process.argv.slice(2);

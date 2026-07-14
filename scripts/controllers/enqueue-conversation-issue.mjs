@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】将 Codex 已确认的 Issue Contract 原子写入 Mac 本地 pending 队列（不调 GitHub API）
+// 【何时跑】Codex Intake 确认后（AGENTS.md 授权的 workspace-write）；详见 enqueue 说明
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";

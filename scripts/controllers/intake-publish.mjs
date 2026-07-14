@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】处理 Intake 结果：证据不足则重置 Feedback；SPEC_READY 则创建 Issue、Problem，并 dispatch issue-delivery.yml
+// 【何时跑】feedback-intake.yml publish Job
 import { readFile } from "node:fs/promises";
 
 import { requestJson, requireEnvironment } from "./lib/http.mjs";

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】幂等写入 Supabase automation_runs，并按阶段更新 Problem 的 Repair Status
+// 【何时跑】issue-delivery publish；pr-gate preview-smoke；pr-outcome repair/finalize
 import { readFile } from "node:fs/promises";
 
 import { requestJson, requireEnvironment } from "./lib/http.mjs";

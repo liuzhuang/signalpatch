@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "GitHub Actions YAML 层级结构",
+    "subtitle": "workflow.yml 文件内 on / permissions / jobs / steps / outputs 的嵌套关系",
+    "output": "github-actions-yaml-structure.html"
+  },
+  "components": [
+    {
+      "id": "file",
+      "type": "external",
+      "label": "workflow.yml",
+      "sublabel": "GitHub Actions 定义文件",
+      "pos": [40, 280],
+      "size": [130, 58]
+    },
+    {
+      "id": "on",
+      "type": "frontend",
+      "label": "on 触发器",
+      "sublabel": "何时运行",
+      "pos": [220, 120],
+      "size": [120, 58],
+      "tag": "顶层字段"
+    },
+    {
+      "id": "permissions",
+      "type": "security",
+      "label": "permissions",
+      "sublabel": "默认令牌权限",
+      "pos": [220, 220],
+      "size": [120, 58]
+    },
+    {
+      "id": "concurrency",
+      "type": "security",
+      "label": "concurrency",
+      "sublabel": "并发控制（可选）",
+      "pos": [220, 320],
+      "size": [120, 58],
+      "tag": "可选"
+    },
+    {
+      "id": "jobs",
+      "type": "backend",
+      "label": "jobs 作业组",
+      "sublabel": "键名 = Job ID",
+      "pos": [400, 220],
+      "size": [130, 58]
+    },
+    {
+      "id": "job_meta",
+      "type": "backend",
+      "label": "Job 元数据",
+      "sublabel": "runs-on / needs / if",
+      "pos": [580, 120],
+      "size": [130, 58]
+    },
+    {
+      "id": "job_permissions",
+      "type": "security",
+      "label": "Job permissions",
+      "sublabel": "覆盖 Workflow 默认",
+      "pos": [580, 220],
+      "size": [130, 58],
+      "tag": "可选"
+    },
+    {
+      "id": "job_outputs",
+      "type": "database",
+      "label": "Job outputs",
+      "sublabel": "对外暴露的输出",
+      "pos": [580, 320],
+      "size": [130, 58]
+    },
+    {
+      "id": "steps",
+      "type": "messagebus",
+      "label": "steps 步骤列表",
+      "sublabel": "数组，顺序执行",
+      "pos": [760, 220],
+      "size": [130, 58]
+    },
+    {
+      "id": "step",
+      "type": "messagebus",
+      "label": "单个 step",
+      "sublabel": "id / uses / run / env",
+      "pos": [940, 160],
+      "size": [120, 58]
+    },
+    {
+      "id": "step_outputs",
+      "type": "database",
+      "label": "步骤输出",
+      "sublabel": "GITHUB_OUTPUT",
+      "pos": [940, 280],
+      "size": [120, 58]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Workflow 文件顶层",
+      "wraps": ["on", "permissions", "concurrency", "jobs"]
+    },
+    {
+      "kind": "security-group",
+      "label": "单个 Job（例：collect / qualify / publish）",
+      "wraps": ["job_meta", "job_permissions", "job_outputs", "steps"]
+    }
+  ],
+  "connections": [
+    { "from": "file", "to": "on", "label": "包含", "variant": "emphasis" },
+    { "from": "file", "to": "permissions", "variant": "default" },
+    { "from": "file", "to": "jobs", "variant": "emphasis" },
+    { "from": "jobs", "to": "job_meta", "variant": "default" },
+    { "from": "jobs", "to": "job_permissions", "variant": "security" },
+    { "from": "jobs", "to": "job_outputs", "label": "定义", "variant": "dashed" },
+    { "from": "jobs", "to": "steps", "variant": "emphasis" },
+    { "from": "steps", "to": "step", "variant": "default" },
+    {
+      "from": "step",
+      "to": "step_outputs",
+      "label": "运行时写入",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 48
+    },
+    {
+      "from": "step_outputs",
+      "to": "job_outputs",
+      "label": "outputs 映射",
+      "variant": "emphasis",
+      "fromSide": "left",
+      "toSide": "right",
+      "route": "orthogonal-h"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "feedback-intake 示例",
+      "items": [
+        "on: schedule + workflow_dispatch",
+        "permissions: contents: read（Workflow 级）",
+        "jobs: collect → qualify → publish",
+        "collect.outputs.has_feedback → qualify 的 if"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "表达式引用",
+      "items": [
+        "步骤内：steps.scan.outputs.has_feedback",
+        "Job 间：needs.collect.outputs.has_feedback",
+        "Job 输出定义：${{ steps.scan.outputs.has_feedback }}"
+      ]
+    }
+  ]
+}

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】把 JSON Schema 的 $ref 内联成单文件，供 Codex CLI 的 output-schema 使用
+// 【何时跑】feedback-intake.yml 的 qualify Job
 import { readFile } from "node:fs/promises";
 
 const [rootPath, referencedPath] = process.argv.slice(2);

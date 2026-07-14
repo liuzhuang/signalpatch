@@ -1,7 +1,8 @@
 name: Feedback Intake
 
-# 每五分钟最多领取一条待处理 Feedback；人工触发使用同一条路径，便于立即验证。
-# GitHub cron 只保证排队，不保证精确在分钟点启动。
+# 【做什么】从 Supabase 取一条网站 Feedback → AI 判断能否开工 → 创建 GitHub Issue，并启动 issue-delivery.yml（写代码、开 PR）
+# 【何时跑】每 5 分钟；Actions 页可手动 Run workflow
+# 【详见】.github/workflows/README.md
 on:
   schedule:
     - cron: "*/5 * * * *"
@@ -23,9 +24,11 @@ jobs:
     outputs:
       has_feedback: ${{ steps.scan.outputs.has_feedback }}
     steps:
+      # 只读检出脚本；persist-credentials=false 防止 GITHUB_TOKEN 被后续步骤误用。
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+      # intake-collect.mjs：回收僵死 PROCESSING → 认领最早一条 PENDING → 写 evidence.json/state.json；无待处理则写 empty 文件。
       - id: scan
         name: Claim one pending Feedback
         env:
@@ -46,7 +49,7 @@ jobs:
           name: intake-evidence
           path: .ai/runs/intake/evidence.json
           retention-days: 1
-      # state.json 保留发布阶段所需的内部关联键，但 qualify Job 不下载它，防止模型接触数据库标识。
+      # state.json 含 feedbackId 等内部键，供 publish 写 Problem/更新 Feedback；qualify 不下载，避免模型接触 DB 主键。
       - name: Upload controller state
         if: steps.scan.outputs.has_feedback == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -64,6 +67,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+      # render-prompt / bundle-schema / validate-json 依赖 workspace 内脚本与 Schema。
       - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -76,13 +80,14 @@ jobs:
             .ai/schemas/intake-output.schema.json \
             .ai/schemas/issue-contract.schema.json \
             > .ai/runs/intake/output-schema.json
-      # 渲染器把仓库规则放在前面，把脱敏 Feedback 明确标记为不可信数据，避免其中的文字变成指令。
+      # 渲染器把 AGENTS.md/Skill 规则放在前面，把 evidence.json 标记为不可信数据，防止 Feedback 正文被当成指令。
       - name: Render untrusted input as data
         run: |
           node scripts/ai/render-prompt.mjs \
             --stage intake \
             --evidence .ai/runs/intake/evidence.json \
             > .ai/runs/intake/prompt.md
+      # read-only Sandbox：Codex 只能输出 JSON，不能改仓库、不能读 Runner 上的 GitHub/Supabase 环境变量。
       - name: Qualify Feedback with Codex
         run: |
           # env -i 清空 Runner 继承环境，只恢复 Codex 登录与可执行文件所需的 HOME/PATH。
@@ -95,6 +100,7 @@ jobs:
             --output-schema .ai/runs/intake/output-schema.json \
             --output-last-message .ai/runs/intake/result.json \
             - < .ai/runs/intake/prompt.md
+      # 形状校验：status 为 NEEDS_EVIDENCE 或 SPEC_READY+contract，不在这里创建 Issue。
       - name: Validate Intake output
         run: >-
           node scripts/ai/validate-json.mjs
@@ -126,20 +132,23 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # qualify 产出的 Intake 判定（NEEDS_EVIDENCE / SPEC_READY + contract）。
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: intake-result
           path: .ai/runs/intake
+      # collect 写入的 feedbackId，用于关联 Problem 与回写 Feedback intake_status。
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: intake-state
           path: .ai/runs/intake
-      # Installation Token 只存在于本 Job，用于创建 Issue 和显式 dispatch Issue Delivery。
+      # Installation Token 只存在于本 Job，用于创建 Issue 和显式 dispatch issue-delivery.yml（避免与 issues.opened 重复触发）。
       - id: app-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.SIGNALPATCH_APP_ID }}
           private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      # intake-publish.mjs：NEEDS_EVIDENCE 只更新 Feedback；SPEC_READY 则上调 risk、建 Issue、写 Problem、dispatch Delivery。
       - name: Publish validated result
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

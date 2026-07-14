@@ -1,3 +1,5 @@
+// 【做什么】对话来源 Issue Contract/Request 的 Schema 校验与 GitHub Issue Body 生成
+// 【说明】库模块，无 CLI 入口；被 enqueue-conversation-issue、publish-conversation-issues import
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 

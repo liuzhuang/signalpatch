@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】按 tracking ID 列表删除 Supabase 中 Smoke Test 写入的 synthetic Feedback
+// 【何时跑】pr-outcome finalize；docs/runbook 人工运维
 import { readFile } from "node:fs/promises";
 
 import { requestJson, requireEnvironment } from "./lib/http.mjs";

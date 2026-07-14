@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】用 Ajv 校验 JSON 是否符合指定 Schema（Intake 输出、Delivery 输出、Contract 等）
+// 【何时跑】多个 Workflow 在 Codex 输出或 Contract 提取后
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 

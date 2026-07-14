@@ -1,6 +1,8 @@
 name: Publish Conversation Issues
 
-# Codex 对话入口只把已确认 Contract 写入本地队列；此 Workflow 定时或手动把队列发布为 GitHub Issue。
+# 【做什么】读取 Mac 本地队列里 Codex 已确认的需求，创建 GitHub Issue（对话入口，非网站 Feedback）
+# 【何时跑】每 5 分钟；须跑在自托管 Mac Runner（队列在本地磁盘）
+# 【详见】.github/workflows/README.md
 on:
   schedule:
     - cron: "*/5 * * * *"
@@ -17,10 +19,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 必须落到 signalpatch 自托管 Runner，才能看到 enqueue-conversation-issue.mjs 写入的本地队列。
+  # 必须落到 signalpatch 自托管 Runner，才能读到 ~/.signalpatch/conversation-issue-queue（或 SIGNALPATCH_CONVERSATION_QUEUE）。
   publish:
     runs-on: [self-hosted, macOS, ARM64, signalpatch]
     steps:
+      # 检出 controller 脚本、Schema 与 policy；Codex enqueue 不在此 Workflow 内执行。
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
@@ -31,13 +34,15 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # Ajv 校验、requiredRisk 上调、GitHub search 防重均依赖 node_modules。
       - run: pnpm install --frozen-lockfile
-      # Controller 会重新校验 Contract、按 request UUID 防重，然后才使用短时 App Token 创建 Issue。
+      # 短时 Installation Token；Codex enqueue 阶段不得持有 GH_TOKEN。
       - id: app-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.SIGNALPATCH_APP_ID }}
           private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      # pending→processing→POST Issue→completed；publisher.lock 与 Workflow concurrency 双重防并发。
       - name: Publish queued conversation Issues
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

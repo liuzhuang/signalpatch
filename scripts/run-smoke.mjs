@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】Playwright 冒烟测试入口：解析 base URL，跑 E2E（会写入 synthetic Feedback）
+// 【何时跑】pnpm test:smoke；PR Gate 预览环境 Smoke、PR Outcome 生产 Smoke
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 

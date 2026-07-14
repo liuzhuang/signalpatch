@@ -1,7 +1,8 @@
 name: Issue Delivery
 
-# 对话来源依靠 issues.opened 自动进入；Feedback 来源由 Intake publish 显式 dispatch。
-# 两种事件都先经过 prepare，不会直接把未经校验的 Issue Body 交给 Codex。
+# 【做什么】读 Issue 里的 Contract → Codex 改代码 → 机器人推分支并开 Draft PR（R3 则只分析不改码）
+# 【何时跑】Issue 被创建时（对话来源）；或 Feedback Intake 完成后 dispatch（带 issue_number）
+# 【详见】.github/workflows/README.md
 on:
   issues:
     types: [opened]
@@ -42,6 +43,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # prepare-issue.mjs 从 Issue 正文提取 contract.json + issue.json；shell 再算 proceed（Feedback+issues.opened 时 false）。
       - id: context
         env:
           GH_TOKEN: ${{ github.token }}
@@ -59,11 +61,13 @@ jobs:
           echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
           echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
           echo "risk_level=$risk_level" >> "$GITHUB_OUTPUT"
+      # 二次 Schema 校验：prepare 只提取 JSON 字符串，不保证字段语义完整。
       - name: Validate Issue Contract
         run: >-
           node scripts/ai/validate-json.mjs
           .ai/schemas/issue-contract.schema.json
           .ai/runs/delivery/contract.json
+      # 下游 build/analyze-r3/publish 共用；retention 7 天便于 Gate/Repair 跨 Run 引用。
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: issue-${{ steps.context.outputs.issue_number }}-contract
@@ -76,17 +80,19 @@ jobs:
     if: needs.prepare.outputs.proceed == 'true' && needs.prepare.outputs.risk_level != 'R3'
     runs-on: [self-hosted, macOS, ARM64, signalpatch]
     steps:
+      # 从 main 开干净工作树；Builder Patch 是「相对当前 HEAD 的 diff」，尚未 push 任何 AI 分支。
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
+      # contract.json 约束 allowedPaths/risk；issue.json 仅含 number/title/url 供 Prompt 引用。
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: issue-${{ needs.prepare.outputs.issue_number }}-contract
           path: .ai/runs/delivery
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+      # --stage build 注入 Contract + Issue 元数据；输出 Builder Prompt，不含 GitHub Token。
       - name: Render Builder prompt
         run: |
           node scripts/ai/render-prompt.mjs \
@@ -94,9 +100,9 @@ jobs:
             --contract .ai/runs/delivery/contract.json \
             --evidence .ai/runs/delivery/issue.json \
             > .ai/runs/delivery/prompt.md
+      # workspace-write：Codex 可改仓库文件，但 env -i 阻断 GH/Supabase/Vercel 凭据。
       - name: Build with Codex
         run: |
-          # Builder 只保留本地登录和工具路径，workspace-write 允许改仓库但不能访问 GitHub 或部署凭据。
           env -i \
             HOME="$HOME" \
             PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
@@ -106,9 +112,10 @@ jobs:
             --output-schema .ai/schemas/delivery-output.schema.json \
             --output-last-message .ai/runs/delivery/result.json \
             - < .ai/runs/delivery/prompt.md
+      # validate-diff 对照 Contract 检查路径/风险；change.patch 非空才允许进入 publish Job。
       - name: Enforce paths and risk
         run: |
-          # intent-to-add 让新文件出现在 git diff 中，避免新增文件绕过 allowedPaths 和风险校验。
+          # intent-to-add 让未跟踪新文件进入 git diff，否则 allowedPaths 无法约束新增路径。
           git add --intent-to-add -- .
           node scripts/ai/validate-json.mjs \
             .ai/schemas/delivery-output.schema.json \
@@ -118,6 +125,7 @@ jobs:
             --contract .ai/runs/delivery/contract.json
           git diff --binary HEAD -- > .ai/runs/delivery/change.patch
           test -s .ai/runs/delivery/change.patch
+      # publish Job 在 Ubuntu 上应用此 patch；Mac Job 不持有 push 凭据。
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: issue-${{ needs.prepare.outputs.issue_number }}-build
@@ -141,6 +149,7 @@ jobs:
           name: issue-${{ needs.prepare.outputs.issue_number }}-contract
           path: .ai/runs/delivery
       - run: pnpm install --frozen-lockfile
+      # --stage review 的 Prompt 模板要求只读分析，禁止提出代码改动。
       - name: Render analysis-only prompt
         run: |
           node scripts/ai/render-prompt.mjs \
@@ -186,6 +195,7 @@ jobs:
         with:
           app-id: ${{ vars.SIGNALPATCH_APP_ID }}
           private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      # r3-analysis.json 整段作为评论正文；移除 ai:ready 表示不再自动交付。
       - name: Publish analysis without modifying code
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -196,7 +206,7 @@ jobs:
             --remove-label "ai:ready" \
             --add-label "ai:human-required"
 
-  # Controller 在干净 main 上应用已验证 Patch，再次校验后才提交、推送并创建 Draft PR。
+  # Controller 在干净 main 上应用 build Job 已校验的 Patch，push 后开 Draft PR（非 Ready，合并由 pr-outcome 负责）。
   publish:
     needs: [prepare, build]
     runs-on: ubuntu-latest
@@ -241,7 +251,7 @@ jobs:
           branch="ai/issue-${ISSUE_NUMBER}-delivery"
           git checkout -b "$branch"
           git apply --index .ai/runs/delivery/change.patch
-          # Artifact 跨越了 Job 信任边界，发布前必须针对即将提交的工作树重新执行同一策略检查。
+          # Artifact 跨越 Mac→Ubuntu 信任边界，apply 后必须对即将提交的工作树再跑同一 validate-diff。
           node scripts/ai/validate-diff.mjs \
             --base HEAD \
             --contract .ai/runs/delivery/contract.json
@@ -250,6 +260,7 @@ jobs:
           git commit -m "fix: deliver SignalPatch issue #${ISSUE_NUMBER}"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --set-upstream origin "$branch"
+          # --draft：PR 创建后触发 pr-gate，但不表示可合并；用户 Repair Status 进入 BUILDING。
           pr_url=$(gh pr create \
             --draft \
             --base main \

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】生成 Production 验收通过的 Issue 评论正文（PR、Commit、URL、各 Acceptance Criterion）
+// 【何时跑】pr-outcome.yml finalize Job，Production Smoke 通过后
 import { readFile } from "node:fs/promises";
 
 const [contractPath, deploymentPath, pr, commit, productionUrl] =

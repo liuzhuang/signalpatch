@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// 【做什么】根据修改路径列表与 .ai/policy.yaml 计算最终风险等级（CLI 诊断工具）
+// 【何时跑】维护者本地手动；无 Workflow 自动调用
 import { readFile } from "node:fs/promises";
 
 import { loadPolicy, requiredRisk } from "./lib/policy.mjs";
