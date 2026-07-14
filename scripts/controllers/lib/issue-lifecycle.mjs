@@ -186,6 +186,30 @@ export async function findIssueByMarker(repository, token, marker) {
   return findMarkedIssue(await listAll(repository, token, "issues"), marker);
 }
 
+export async function ensureIssueComment({
+  repository,
+  token,
+  issueNumber,
+  marker,
+  body,
+}) {
+  const comments = await listAll(
+    repository,
+    token,
+    `issues/${issueNumber}/comments`,
+  );
+  if (comments.some((comment) => comment.body?.includes(marker))) return;
+
+  await requestJson(
+    `https://api.github.com/repos/${repository}/issues/${issueNumber}/comments`,
+    {
+      method: "POST",
+      headers: headers(token),
+      body: JSON.stringify({ body: `${body}\n\n<!-- ${marker} -->` }),
+    },
+  );
+}
+
 async function createIssue(repository, token, title, body, labels) {
   return requestJson(`https://api.github.com/repos/${repository}/issues`, {
     method: "POST",
