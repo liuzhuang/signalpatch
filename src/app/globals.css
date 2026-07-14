@@ -6,7 +6,68 @@
   --muted: #929aa5;
   --line: #272c35;
   --panel: #0d1118;
+  --surface: #090c11;
+  --panel-text: #cfd3d8;
+  --hero-text: #bac0c8;
+  --button-foreground: #150802;
+  --result-code: #f6b19f;
+  --link: #d7dbe0;
+  --grid-line: rgba(255, 255, 255, 0.025);
   --accent: #ff5c35;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #f6f7f9;
+    --foreground: #14171c;
+    --muted: #59616d;
+    --line: #d9dde5;
+    --panel: #ffffff;
+    --surface: #f2f4f7;
+    --panel-text: #3f4650;
+    --hero-text: #4c5562;
+    --button-foreground: #ffffff;
+    --result-code: #b3351f;
+    --link: #2c333d;
+    --grid-line: rgba(20, 23, 28, 0.05);
+    --accent: #d9482f;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --background: #f6f7f9;
+  --foreground: #14171c;
+  --muted: #59616d;
+  --line: #d9dde5;
+  --panel: #ffffff;
+  --surface: #f2f4f7;
+  --panel-text: #3f4650;
+  --hero-text: #4c5562;
+  --button-foreground: #ffffff;
+  --result-code: #b3351f;
+  --link: #2c333d;
+  --grid-line: rgba(20, 23, 28, 0.05);
+  --accent: #d9482f;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --background: #07090d;
+  --foreground: #f4f6f8;
+  --muted: #929aa5;
+  --line: #272c35;
+  --panel: #0d1118;
+  --surface: #090c11;
+  --panel-text: #cfd3d8;
+  --hero-text: #bac0c8;
+  --button-foreground: #150802;
+  --result-code: #f6b19f;
+  --link: #d7dbe0;
+  --grid-line: rgba(255, 255, 255, 0.025);
+  --accent: #ff5c35;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -35,8 +96,8 @@ main {
       rgba(255, 92, 53, 0.14),
       transparent 32rem
     ),
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size:
     auto,
     48px 48px,
@@ -53,6 +114,13 @@ footer {
 .hero {
   padding: 96px 0 64px;
   border-bottom: 1px solid var(--line);
+}
+
+.hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
 }
 
 .eyebrow {
@@ -73,6 +141,27 @@ footer {
   box-shadow: 0 0 18px var(--accent);
 }
 
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font: 600 12px/1 var(--font-mono);
+}
+
+.theme-toggle button {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+}
+
+.theme-toggle button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--foreground);
+}
+
 h1 {
   margin: 22px 0 12px;
   font-size: clamp(64px, 10vw, 132px);
@@ -87,7 +176,7 @@ h1 span {
 .hero > p {
   max-width: 660px;
   margin: 28px 0 36px;
-  color: #bac0c8;
+  color: var(--hero-text);
   font-size: 18px;
   line-height: 1.7;
 }
@@ -104,7 +193,7 @@ h1 span {
   padding: 9px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(13, 17, 24, 0.75);
+  background: color-mix(in srgb, var(--panel) 75%, transparent);
 }
 
 .flow i {
@@ -154,7 +243,7 @@ h2 {
 }
 
 label {
-  color: #cfd3d8;
+  color: var(--panel-text);
   font: 600 12px/1 var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -163,10 +252,10 @@ label {
 input,
 textarea {
   width: 100%;
-  border: 1px solid #313743;
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 15px 16px;
-  background: #090c11;
+  background: var(--surface);
   color: var(--foreground);
   font: 15px/1.6 var(--font-sans);
   outline: none;
@@ -185,7 +274,7 @@ button {
   border-radius: 4px;
   padding: 13px 18px;
   background: var(--accent);
-  color: #150802;
+  color: var(--button-foreground);
   font: 700 14px/1 var(--font-sans);
   cursor: pointer;
 }
@@ -210,7 +299,7 @@ button:disabled {
   margin-top: auto;
   padding: 18px;
   border-left: 2px solid var(--accent);
-  background: #090c11;
+  background: var(--surface);
 }
 
 .result span,
@@ -220,7 +309,7 @@ button:disabled {
 
 .result code {
   overflow-wrap: anywhere;
-  color: #f6b19f;
+  color: var(--result-code);
 }
 
 footer {
@@ -233,11 +322,16 @@ footer {
 
 footer a {
   margin-left: auto;
-  color: #d7dbe0;
+  color: var(--link);
   text-decoration: none;
 }
 
 @media (max-width: 760px) {
+  .hero-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .hero {
     padding-top: 64px;
   }
