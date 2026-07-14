@@ -1,12 +1,69 @@
 @import "tailwindcss";
 
 :root {
+  --background: #f6f7f8;
+  --foreground: #16181d;
+  --muted: #626a75;
+  --line: #d9dde3;
+  --panel: #ffffff;
+  --accent: #d84522;
+  --grid-line: rgba(22, 24, 29, 0.05);
+  --hero-copy: #4d5662;
+  --input-background: #ffffff;
+  --button-foreground: #ffffff;
+  --result-background: #f1f3f5;
+  --result-code: #a83a20;
+  --footer-link: #3e4650;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --background: #07090d;
+    --foreground: #f4f6f8;
+    --muted: #929aa5;
+    --line: #272c35;
+    --panel: #0d1118;
+    --accent: #ff5c35;
+    --grid-line: rgba(255, 255, 255, 0.025);
+    --hero-copy: #bac0c8;
+    --input-background: #090c11;
+    --button-foreground: #150802;
+    --result-background: #090c11;
+    --result-code: #f6b19f;
+    --footer-link: #d7dbe0;
+  }
+}
+
+:root[data-theme="light"] {
+  --background: #f6f7f8;
+  --foreground: #16181d;
+  --muted: #626a75;
+  --line: #d9dde3;
+  --panel: #ffffff;
+  --accent: #d84522;
+  --grid-line: rgba(22, 24, 29, 0.05);
+  --hero-copy: #4d5662;
+  --input-background: #ffffff;
+  --button-foreground: #ffffff;
+  --result-background: #f1f3f5;
+  --result-code: #a83a20;
+  --footer-link: #3e4650;
+}
+
+:root[data-theme="dark"] {
   --background: #07090d;
   --foreground: #f4f6f8;
   --muted: #929aa5;
   --line: #272c35;
   --panel: #0d1118;
   --accent: #ff5c35;
+  --grid-line: rgba(255, 255, 255, 0.025);
+  --hero-copy: #bac0c8;
+  --input-background: #090c11;
+  --button-foreground: #150802;
+  --result-background: #090c11;
+  --result-code: #f6b19f;
+  --footer-link: #d7dbe0;
 }
 
 @theme inline {
@@ -35,8 +92,8 @@ main {
       rgba(255, 92, 53, 0.14),
       transparent 32rem
     ),
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size:
     auto,
     48px 48px,
@@ -53,6 +110,13 @@ footer {
 .hero {
   padding: 96px 0 64px;
   border-bottom: 1px solid var(--line);
+}
+
+.hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .eyebrow {
@@ -84,10 +148,10 @@ h1 span {
   color: var(--accent);
 }
 
-.hero > p {
+.hero-copy {
   max-width: 660px;
   margin: 28px 0 36px;
-  color: #bac0c8;
+  color: var(--hero-copy);
   font-size: 18px;
   line-height: 1.7;
 }
@@ -104,7 +168,7 @@ h1 span {
   padding: 9px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(13, 17, 24, 0.75);
+  background: var(--panel);
 }
 
 .flow i {
@@ -154,7 +218,7 @@ h2 {
 }
 
 label {
-  color: #cfd3d8;
+  color: var(--muted);
   font: 600 12px/1 var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -163,10 +227,10 @@ label {
 input,
 textarea {
   width: 100%;
-  border: 1px solid #313743;
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 15px 16px;
-  background: #090c11;
+  background: var(--input-background);
   color: var(--foreground);
   font: 15px/1.6 var(--font-sans);
   outline: none;
@@ -185,9 +249,17 @@ button {
   border-radius: 4px;
   padding: 13px 18px;
   background: var(--accent);
-  color: #150802;
+  color: var(--button-foreground);
   font: 700 14px/1 var(--font-sans);
   cursor: pointer;
+}
+
+.theme-toggle {
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--foreground);
+  font: 600 12px/1 var(--font-mono);
 }
 
 button:disabled {
@@ -201,7 +273,7 @@ button:disabled {
 }
 
 .error {
-  color: #ff8b72;
+  color: var(--accent);
 }
 
 .result {
@@ -210,7 +282,7 @@ button:disabled {
   margin-top: auto;
   padding: 18px;
   border-left: 2px solid var(--accent);
-  background: #090c11;
+  background: var(--result-background);
 }
 
 .result span,
@@ -220,7 +292,7 @@ button:disabled {
 
 .result code {
   overflow-wrap: anywhere;
-  color: #f6b19f;
+  color: var(--result-code);
 }
 
 footer {
@@ -233,7 +305,7 @@ footer {
 
 footer a {
   margin-left: auto;
-  color: #d7dbe0;
+  color: var(--footer-link);
   text-decoration: none;
 }
 

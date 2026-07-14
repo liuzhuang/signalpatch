@@ -8,6 +8,45 @@ test("health endpoint reports the deployed version", async ({ request }) => {
   await expect(response.json()).resolves.toMatchObject({ status: "ok" });
 });
 
+test("homepage follows the system theme and supports an accessible override", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/");
+
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(246, 247, 248)",
+  );
+  expect((await page.locator(".hero-copy").textContent())?.trim()).not.toBe("");
+
+  const toggle = page.getByRole("switch");
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await toggle.press("Enter");
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(7, 9, 13)",
+  );
+  await toggle.press("Enter");
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(246, 247, 248)",
+  );
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.reload();
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(7, 9, 13)",
+  );
+  await expect(page.getByRole("switch")).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+});
+
 test("anonymous Feedback returns the same status for exact and padded Tracking IDs", async ({
   request,
 }) => {
