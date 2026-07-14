@@ -23,6 +23,7 @@ jobs:
       conclusion: ${{ steps.verify.outputs.conclusion }}
       head_sha: ${{ steps.verify.outputs.head_sha }}
       issue_number: ${{ steps.verify.outputs.issue_number }}
+      mode: ${{ steps.verify.outputs.mode }}
       pr_number: ${{ steps.verify.outputs.pr_number }}
       risk_level: ${{ steps.verify.outputs.risk_level }}
     steps:
@@ -36,6 +37,7 @@ jobs:
           RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           RUN_PULL_REQUESTS: ${{ toJson(github.event.workflow_run.pull_requests) }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           [[ $(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p.length))' "$RUN_PULL_REQUESTS") == "1" ]]
           pr_number=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p[0].number))' "$RUN_PULL_REQUESTS")
@@ -45,19 +47,30 @@ jobs:
           head_repo=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(p.head.repo.full_name)' "$pr")
           author=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(p.user.login)' "$pr")
           [[ "$head_repo" == "$GITHUB_REPOSITORY" ]]
-          [[ "$branch" =~ ^ai/issue-([0-9]+)- ]]
-          issue_number="${BASH_REMATCH[1]}"
-          [[ "$author" == "$APP_BOT" ]]
           [[ "$head_sha" == "$RUN_HEAD_SHA" ]]
-          node scripts/controllers/prepare-issue.mjs "$issue_number" .ai/runs/outcome
-          risk_level=$(node -e 'const c=require("./.ai/runs/outcome/contract.json"); process.stdout.write(c.riskLevel)')
+          if [[ "$branch" =~ ^ai/issue-([0-9]+)- ]] && [[ "$author" == "$APP_BOT" ]]; then
+            mode=automation
+            issue_number="${BASH_REMATCH[1]}"
+            node scripts/controllers/prepare-issue.mjs "$issue_number" .ai/runs/outcome
+            risk_level=$(node -e 'const c=require("./.ai/runs/outcome/contract.json"); process.stdout.write(c.riskLevel)')
+          elif [[ "$branch" =~ ^codex/ ]] && [[ "$author" == "$REPOSITORY_OWNER" ]]; then
+            mode=manual
+            risk_level=R2
+          else
+            echo "PR source is not trusted for this outcome" >&2
+            exit 1
+          fi
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
           echo "conclusion=$RUN_CONCLUSION" >> "$GITHUB_OUTPUT"
           echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
-          echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          if [[ "$mode" == automation ]]; then
+            echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          fi
           echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
           echo "risk_level=$risk_level" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.verify.outputs.mode == 'automation'
         with:
           name: outcome-contract
           path: .ai/runs/outcome
@@ -65,7 +78,7 @@ jobs:
 
   collect-failure:
     needs: trust
-    if: needs.trust.outputs.conclusion != 'success'
+    if: needs.trust.outputs.mode == 'automation' && needs.trust.outputs.conclusion != 'success'
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -106,7 +119,7 @@ jobs:
 
   repair:
     needs: [trust, collect-failure]
-    if: needs.collect-failure.outputs.failure_kind == 'application'
+    if: needs.trust.outputs.mode == 'automation' && needs.collect-failure.outputs.failure_kind == 'application'
     runs-on: [self-hosted, macOS, ARM64, signalpatch]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -234,7 +247,7 @@ jobs:
 
   mark-human-required:
     needs: [trust, collect-failure, repair]
-    if: always() && needs.collect-failure.outputs.failure_kind == 'application' && needs.repair.result == 'failure'
+    if: always() && needs.trust.outputs.mode == 'automation' && needs.collect-failure.outputs.failure_kind == 'application' && needs.repair.result == 'failure'
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -253,7 +266,7 @@ jobs:
 
   finalize:
     needs: trust
-    if: needs.trust.outputs.conclusion == 'success'
+    if: needs.trust.outputs.mode == 'automation' && needs.trust.outputs.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: ${{ needs.trust.outputs.risk_level == 'R2' && 'r2-approval' || 'production' }}
     permissions:
