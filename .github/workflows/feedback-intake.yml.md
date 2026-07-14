@@ -1,6 +1,6 @@
 # feedback-intake.yml 说明
 
-[feedback-intake.yml](feedback-intake.yml) 把**网站用户提交的 Feedback** 变成 **GitHub Issue + Issue Contract**，并在成功时 **dispatch** [issue-delivery.yml](issue-delivery.yml)（写代码、开 PR）。Delivery 详解见 [issue-delivery.yml.md](issue-delivery.yml.md)。
+[feedback-intake.yml](feedback-intake.yml) 把**网站用户提交的 Feedback** 变成 **GitHub Issue + Issue Contract**；成功晋升为 `content:processed` 后，由标签事件启动 [issue-delivery.yml](issue-delivery.yml)（写代码、开 PR）。Delivery 详解见 [issue-delivery.yml.md](issue-delivery.yml.md)。
 
 **文档结构**：[一、总体](#一总体) → [二、细节（各 Job）](#二细节) → [三、答疑（术语与开关）](#三答疑)
 
@@ -31,11 +31,11 @@ flowchart LR
 
 ### Job 总览
 
-| Job         | Runner          | 用途（一句话）                                               | 何时跳过               |
-| ----------- | --------------- | ------------------------------------------------------------ | ---------------------- |
-| **collect** | `ubuntu-latest` | 从 Supabase **认领一条** `PENDING` Feedback，写出脱敏证据    | 从不跳过               |
-| **qualify** | 自托管 macOS    | Codex **只读**判断：证据够不够、能否生成 Issue Contract      | `has_feedback != true` |
-| **publish** | `ubuntu-latest` | 校验通过后 **创建 Issue**、写 Problem、**dispatch Delivery** | `qualify` 未运行或失败 |
+| Job         | Runner          | 用途（一句话）                                            | 何时跳过               |
+| ----------- | --------------- | --------------------------------------------------------- | ---------------------- |
+| **collect** | `ubuntu-latest` | 从 Supabase **认领一条** `PENDING` Feedback，写出脱敏证据 | 从不跳过               |
+| **qualify** | 自托管 macOS    | Codex **只读**判断：证据够不够、能否生成 Issue Contract   | `has_feedback != true` |
+| **publish** | `ubuntu-latest` | 校验通过后 **创建 Issue**、写 Problem、晋升 processed     | `qualify` 未运行或失败 |
 
 ### Job 之间如何传参
 
@@ -45,7 +45,7 @@ flowchart LR
 | collect | qualify        | Artifact `intake-evidence`   | 脱敏 Feedback          |
 | collect | publish        | Artifact `intake-state`      | `feedbackId`           |
 | qualify | publish        | Artifact `intake-result`     | Intake 判定与 Contract |
-| publish | issue-delivery | `workflow_dispatch`          | `issue_number`         |
+| publish | issue-delivery | `issues.labeled`             | `content:processed`    |
 
 ---
 
@@ -304,12 +304,12 @@ flowchart TD
 
 在 GitHub 云 Runner 上运行 [`intake-publish.mjs`](../../scripts/controllers/intake-publish.mjs)，持有 **GitHub App Token** 与 **Supabase Service Role**：
 
-| `result.status`      | 行为                                                                                                                                                                  |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`NEEDS_EVIDENCE`** | 创建 `content:raw` + `ai:needs-input` Issue；创建 Problem；Feedback 标为 `NEEDS_EVIDENCE`；不 dispatch Delivery                                                       |
-| **`SPEC_READY`**     | 按 policy **上调**风险 → 创建 `content:raw` Issue → 重复则评论并关闭；否则原地晋升 `content:processed` → 创建 Problem → Feedback 标为 `PROCESSED` → dispatch Delivery |
+| `result.status`      | 行为                                                                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`NEEDS_EVIDENCE`** | 创建 `content:raw` + `ai:needs-input` Issue；创建 Problem；Feedback 标为 `NEEDS_EVIDENCE`；不进入 Delivery                                                               |
+| **`SPEC_READY`**     | 按 policy **上调**风险 → 创建 `content:raw` Issue → 重复则评论并关闭；否则原地晋升 `content:processed` → 创建 Problem → Feedback 标为 `PROCESSED`；标签事件启动 Delivery |
 
-使用 **显式 dispatch** 启动 Delivery。Issue Delivery 不监听 `issues.opened`，只接受 `content:processed` Issue。
+使用 **`content:processed` 标签事件**启动 Delivery。Issue Delivery 不监听普通 `issues.opened`，只接受有效 Contract 的 processed Issue。
 
 #### 脚本执行流程（intake-publish.mjs）
 
@@ -323,12 +323,12 @@ node scripts/controllers/intake-publish.mjs \
 
 **必需环境变量**
 
-| 变量                        | 用途                                                           |
-| --------------------------- | -------------------------------------------------------------- |
-| `GH_TOKEN`                  | GitHub App Installation Token（创建 Issue、dispatch Workflow） |
-| `GITHUB_REPOSITORY`         | 形如 `owner/repo`                                              |
-| `SUPABASE_URL`              | PostgREST 根地址                                               |
-| `SUPABASE_SERVICE_ROLE_KEY` | 更新 `feedback`、插入 `problems`                               |
+| 变量                        | 用途                                              |
+| --------------------------- | ------------------------------------------------- |
+| `GH_TOKEN`                  | GitHub App Installation Token（创建和更新 Issue） |
+| `GITHUB_REPOSITORY`         | 形如 `owner/repo`                                 |
+| `SUPABASE_URL`              | PostgREST 根地址                                  |
+| `SUPABASE_SERVICE_ROLE_KEY` | 更新 `feedback`、插入 `problems`                  |
 
 **读入文件**
 
@@ -354,8 +354,8 @@ flowchart TD
   close --> problem[取得 canonical Problem]
   promote --> problem
   problem --> fb[PATCH feedback → PROCESSED]
-  fb --> dispatch[POST workflow_dispatch issue-delivery.yml]
-  dispatch --> okOut[stdout JSON + exit 0]
+  fb --> processed[PATCH content:processed]
+  processed --> okOut[stdout JSON + exit 0]
 ```
 
 **分支 A：`NEEDS_EVIDENCE`**
@@ -368,7 +368,7 @@ flowchart TD
 | 2    | `POST /rest/v1/problems`                           | `spec_ready: false`，`repair_status: "NEEDS_INPUT"`          |
 | 3    | `PATCH /rest/v1/feedback?id=eq.<state.feedbackId>` | 关联 Problem，设置 `intake_status: "NEEDS_EVIDENCE"`         |
 
-**不做的事**：不生成 Issue Contract，不 dispatch `issue-delivery.yml`。
+**不做的事**：不生成 Issue Contract，不进入 `issue-delivery.yml`。
 
 **分支 B：`SPEC_READY`**
 
@@ -419,15 +419,15 @@ Controller 使用 Problem 指纹查找 processed Issue；旧 Issue 会从正文 
 | 1    | `POST /rest/v1/problems`（`prefer: return=representation`） | `summary: contract.problemSummary`，`issue_number: issue.number`，`spec_ready: true`，`repair_status: "QUALIFYING"` |
 | 2    | `PATCH /rest/v1/feedback?id=eq.<state.feedbackId>`          | `problem_id: problem.id`，`intake_status: "PROCESSED"`，`processing_started_at: null`，`processed_at: <ISO8601>`    |
 
-**B4. 显式 dispatch Delivery**
+**B4. 标签事件启动 Delivery**
 
-| 项目       | 值                                                         |
-| ---------- | ---------------------------------------------------------- |
-| **API**    | `POST .../actions/workflows/issue-delivery.yml/dispatches` |
-| **ref**    | `"main"`                                                   |
-| **inputs** | `{ "issue_number": "<issue.number 字符串>" }`              |
+| 项目       | 值                                            |
+| ---------- | --------------------------------------------- |
+| **事件**   | `issues.labeled`，标签为 `content:processed`  |
+| **ref**    | `"main"`                                      |
+| **inputs** | `{ "issue_number": "<issue.number 字符串>" }` |
 
-**为何显式 dispatch**：raw Issue 创建时不能进入 Builder。publish 只在同一个 Issue 晋升为 `content:processed` 后 dispatch Delivery。
+raw Issue 创建时不能进入 Builder；只有同一个 Issue 晋升为 `content:processed` 后，标签事件才启动 Delivery。
 
 stdout（JSON 一行）：
 
@@ -457,7 +457,7 @@ stdout（JSON 一行）：
 | **Artifact**       | `intake-result` → `result.json`                  |
 | **Artifact**       | `intake-state` → `state.json`（含 `feedbackId`） |
 | **Secrets / Vars** | `SIGNALPATCH_APP_*` → `GH_TOKEN`；`SUPABASE_*`   |
-| **权限**           | `issues: write`、`actions: write`（仅本 Job）    |
+| **权限**           | `issues: write`（仅本 Job）                      |
 
 #### 输出
 
@@ -466,7 +466,7 @@ stdout（JSON 一行）：
 | **GitHub**     | 新建或更新 Issue | raw 保留待补证据；SPEC_READY 晋升 processed；重复 Issue 评论后关闭 |
 | **Supabase**   | `problems` 行    | `issue_number`、`spec_ready`、对应 Repair Status                   |
 | **Supabase**   | `feedback` 更新  | `PROCESSED` + `problem_id`；或 `NEEDS_EVIDENCE`                    |
-| **Workflow**   | dispatch         | `issue-delivery.yml`，输入 `issue_number`                          |
+| **Workflow**   | 标签事件         | `issue-delivery.yml` 从事件读取 `issue_number`                     |
 | **Artifact**   | —                | 本 Job **不上传** Artifact                                         |
 | **Job output** | —                | 本 Job **未**定义 `jobs.publish.outputs`                           |
 
@@ -817,7 +817,7 @@ flowchart TD
 | **`has_feedback`**                                     | collect 之后 | 「有没有东西需要 Intake」——队列是否非空且认领成功             |
 | **`result.status`**（`NEEDS_EVIDENCE` / `SPEC_READY`） | qualify 之后 | 「这条 Feedback 信息够不够写成 Issue Contract」——语义判定结果 |
 
-`has_feedback=true` 时 publish 会创建或复用 Issue；只有 qualify 产出 `SPEC_READY` 且未命中重复 Problem 时才 dispatch Delivery。
+`has_feedback=true` 时 publish 会创建或复用 Issue；只有 qualify 产出 `SPEC_READY` 且未命中重复 Problem 时才添加 `content:processed` 并启动 Delivery。
 
 ### 相关文件
 

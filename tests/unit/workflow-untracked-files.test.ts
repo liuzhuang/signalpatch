@@ -32,15 +32,16 @@ describe("delivery workflow stage boundaries", () => {
     ).toEqual(["opened", "synchronize", "reopened"]);
   });
 
-  it("starts Delivery only through the explicit unified dispatch", () => {
+  it("starts Delivery when an Issue becomes processed", () => {
     const delivery = workflow(".github/workflows/issue-delivery.yml");
     const conversationPublisher = workflow(
       ".github/workflows/publish-conversation-issues.yml",
     );
 
-    expect(delivery.on.issues).toBeUndefined();
+    expect(delivery.on.issues.types).toEqual(["labeled"]);
     expect(delivery.on.workflow_dispatch).toBeDefined();
-    expect(conversationPublisher.permissions.actions).toBe("write");
+    expect(delivery.jobs.prepare.if).toContain("content:processed");
+    expect(conversationPublisher.permissions.actions).toBeUndefined();
     expect(conversationPublisher.jobs.publish.concurrency.group).toBe(
       "issue-publisher",
     );

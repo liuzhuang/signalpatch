@@ -11,7 +11,6 @@ on:
 # 仓库内容只读，Issue 写权限仅供最终发布；Codex 不在这条 Workflow 中运行。
 permissions:
   contents: read
-  actions: write
   issues: write
 
 # 队列目录由自托管 Runner 共享，单发布器可避免两个进程同时领取同一请求。

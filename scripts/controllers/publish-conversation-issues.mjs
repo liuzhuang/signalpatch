@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 【做什么】消费本地对话队列，发布 raw Issue，去重后晋升 processed 并 dispatch Delivery
+// 【做什么】消费本地对话队列，发布 raw Issue，去重后晋升 processed
 // 【何时跑】publish-conversation-issues.yml；亦可本地手动（需 GH_TOKEN）
 import {
   mkdir,
@@ -15,10 +15,7 @@ import { join } from "node:path";
 
 import { assertConversationRequest } from "./lib/conversation-issue.mjs";
 import { requireEnvironment } from "./lib/http.mjs";
-import {
-  dispatchIssueDelivery,
-  publishContractIssue,
-} from "./lib/issue-lifecycle.mjs";
+import { publishContractIssue } from "./lib/issue-lifecycle.mjs";
 import { loadPolicy, requiredRisk } from "../ai/lib/policy.mjs";
 
 const queueDirectory =
@@ -62,16 +59,12 @@ async function loadRequest(path) {
 }
 
 async function publishRequest(request, repository, token) {
-  const result = await publishContractIssue({
+  return publishContractIssue({
     repository,
     token,
     contract: request.contract,
     idempotencyMarker: `signalpatch-conversation-request:${request.requestId}`,
   });
-  if (!result.duplicate) {
-    await dispatchIssueDelivery(repository, token, result.issue.number);
-  }
-  return result;
 }
 
 async function complete(path, request, result) {

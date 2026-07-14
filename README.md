@@ -69,7 +69,7 @@ Vercel 的 Git 自动部署通过 `vercel.json` 关闭。PR Gate 先构建 produ
 
 ## Codex 对话 Issue 上报
 
-这是 Codex 对话的直接入口，不需要用户打开 GitHub 或提交应用内 Feedback。Intake 仍在 `read-only` Sandbox 生成 Issue Contract；用户明确确认后，入口先检查当前仓库的 `gh` 登录状态和 Issue 写权限：有权限就直接创建并启动 Delivery，没有权限才执行本地入队：
+这是 Codex 对话的直接入口，不需要用户打开 GitHub 或提交应用内 Feedback。Intake 仍在 `read-only` Sandbox 生成 Issue Contract；用户明确确认后，入口先检查当前仓库的 `gh` 登录状态和 Issue 写权限：有权限就直接创建，没有权限才执行本地入队。Issue 被标记为 `content:processed` 后自动启动 Delivery：
 
 ```bash
 node scripts/controllers/enqueue-conversation-issue.mjs \

@@ -44,7 +44,7 @@ pnpm test:smoke -- --base-url="https://<production-url>"
 - 扫描器只领取一个待处理 Feedback。
 - Codex 只读取脱敏 evidence，没有 Supabase Service Role Key。
 - 输出通过 JSON Schema 校验。
-- Controller 先创建 `content:raw` Issue；达到 `SPEC_READY` 后在同一个 Issue 上改为 `content:processed`，并显式 dispatch `Issue Delivery`。
+- Controller 先创建 `content:raw` Issue；达到 `SPEC_READY` 后在同一个 Issue 上改为 `content:processed`，标签事件自动启动 `Issue Delivery`。
 - 如果同一 Problem 已有 processed Issue，当前 raw Issue 评论 canonical Issue、添加 `duplicate` 并关闭，不再启动 Delivery。
 
 ### Issue Delivery

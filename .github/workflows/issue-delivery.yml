@@ -1,9 +1,11 @@
 name: Issue Delivery
 
 # 【做什么】读 Issue 里的 Contract → Codex 改代码 → 机器人推分支并开 Draft PR（R3 则只分析不改码）
-# 【何时跑】Feedback/Codex 发布器把同一个 Issue 晋升为 processed 后显式 dispatch
+# 【何时跑】Issue 被标记为 content:processed；workflow_dispatch 仅用于运维补跑
 # 【详见】.github/workflows/README.md
 on:
+  issues:
+    types: [labeled]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -16,7 +18,7 @@ permissions:
   contents: read
   issues: read
 
-# 同一个 Issue 的重复 dispatch 串行执行，避免并发创建两个 AI 分支或 PR。
+# 同一个 Issue 的标签事件或补跑串行执行，避免并发创建两个 AI 分支或 PR。
 concurrency:
   group: issue-delivery-${{ inputs.issue_number || github.event.issue.number }}
   cancel-in-progress: false
@@ -24,6 +26,7 @@ concurrency:
 jobs:
   # 在 GitHub 托管 Runner 中提取 signalpatch-contract 标记块、校验来源并确定风险，不运行 Codex。
   prepare:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'content:processed'
     runs-on: ubuntu-latest
     outputs:
       issue_number: ${{ steps.context.outputs.issue_number }}

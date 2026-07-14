@@ -121,7 +121,6 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
-      actions: write
       issues: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -145,13 +144,13 @@ jobs:
         with:
           name: intake-state
           path: .ai/runs/intake
-      # Installation Token 只存在于本 Job，用于 raw → processed、重复关闭和显式 dispatch Delivery。
+      # Installation Token 只存在于本 Job，用于 raw → processed 和重复关闭。
       - id: app-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.SIGNALPATCH_APP_ID }}
           private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
-      # intake-publish.mjs：创建 raw Issue；SPEC_READY 原地晋升，重复则评论并关闭，否则 dispatch Delivery。
+      # intake-publish.mjs：创建 raw Issue；SPEC_READY 原地晋升，重复则评论并关闭。
       - name: Publish validated result
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

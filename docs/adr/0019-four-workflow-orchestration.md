@@ -1,6 +1,6 @@
 # 使用四个 Workflow 串联完整生命周期
 
-SignalPatch 使用 `feedback-intake.yml`、`issue-delivery.yml`、`pr-gate.yml` 和 `pr-outcome.yml`，并由 `publish-conversation-issues.yml` 接入本地 Codex 队列。两个入口都先创建 raw Issue，再原地晋升为 processed Issue，并显式 dispatch Delivery。Delivery 创建 Draft PR；PR Gate 执行验证、独立审查、Preview 和验收；PR Outcome 仅通过一层 `workflow_run` 在失败时修复、成功时合并和发布。
+SignalPatch 使用 `feedback-intake.yml`、`issue-delivery.yml`、`pr-gate.yml` 和 `pr-outcome.yml`，并由 `publish-conversation-issues.yml` 接入本地 Codex 队列。两个入口都先创建 raw Issue，再原地晋升为 processed Issue；`content:processed` 标签事件统一启动 Delivery，也允许带有效 Contract 的手动 Issue 进入同一流程。Delivery 创建 Draft PR；PR Gate 执行验证、独立审查、Preview 和验收；PR Outcome 仅通过一层 `workflow_run` 在失败时修复、成功时合并和发布。
 
 GitHub 仓库不使用 Ruleset 或 Branch Protection 约束 `main`。PR Gate 的四项结果属于自动化流程内部证据，不作为 Required Checks；自动化仍只在 Gate 成功后进入 finalize。
 

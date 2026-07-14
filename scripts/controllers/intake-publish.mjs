@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-// 【做什么】发布 raw Issue；证据充分时原地晋升 processed，重复则评论关闭，否则 dispatch Delivery
+// 【做什么】发布 raw Issue；证据充分时原地晋升 processed，重复则评论关闭
 // 【何时跑】feedback-intake.yml publish Job
 import { readFile } from "node:fs/promises";
 
 import { requestJson, requireEnvironment } from "./lib/http.mjs";
 import {
-  dispatchIssueDelivery,
   issueLabels,
   publishContractIssue,
   publishRawIssue,
@@ -138,12 +137,6 @@ const problem = await ensureProblem(
   true,
   "QUALIFYING",
 );
-////////////////////////////////////////////////////
-// 使用显式 workflow_dispatch 启动 Delivery，不依赖 GitHub Token 写入产生隐式事件
-////////////////////////////////////////////////////
-if (!duplicate) {
-  await dispatchIssueDelivery(GITHUB_REPOSITORY, GH_TOKEN, issue.number);
-}
 await updateFeedback({
   problem_id: problem.id,
   intake_status: "PROCESSED",

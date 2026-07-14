@@ -8,10 +8,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import { newConversationRequest } from "./lib/conversation-issue.mjs";
-import {
-  dispatchIssueDelivery,
-  publishContractIssue,
-} from "./lib/issue-lifecycle.mjs";
+import { publishContractIssue } from "./lib/issue-lifecycle.mjs";
 import { loadPolicy, requiredRisk } from "../ai/lib/policy.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -79,13 +76,6 @@ async function publishDirectly() {
     contract: request.contract,
     idempotencyMarker: `signalpatch-conversation-request:${request.requestId}`,
   });
-  if (!result.duplicate) {
-    await dispatchIssueDelivery(
-      access.repository,
-      access.token,
-      result.issue.number,
-    );
-  }
   return result;
 }
 

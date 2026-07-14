@@ -1,5 +1,5 @@
-// 【做什么】统一 Feedback/Codex Issue 的 raw → processed 生命周期、精确去重和 Delivery dispatch
-// 【说明】库模块，无 CLI 入口；外部写操作只由持 GitHub App Token 的 Controller 调用
+// 【做什么】统一 Feedback/Codex Issue 的 raw → processed 生命周期与精确去重
+// 【说明】库模块，无 CLI 入口；外部写操作只由受信任 Controller 或已认证 gh 入口调用
 import { createHash } from "node:crypto";
 
 import { requestJson } from "./http.mjs";
@@ -263,18 +263,4 @@ export async function publishContractIssue({
     },
   );
   return { issue: processed, duplicate: null };
-}
-
-export async function dispatchIssueDelivery(repository, token, issueNumber) {
-  await requestJson(
-    `https://api.github.com/repos/${repository}/actions/workflows/issue-delivery.yml/dispatches`,
-    {
-      method: "POST",
-      headers: headers(token),
-      body: JSON.stringify({
-        ref: "main",
-        inputs: { issue_number: String(issueNumber) },
-      }),
-    },
-  );
 }
