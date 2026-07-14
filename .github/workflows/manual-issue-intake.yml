@@ -1,10 +1,10 @@
 name: Manual Issue Intake
 
 # 【做什么】定时评估已有 content:raw Issue，并原地评论或晋升
-# 【何时跑】每 1 分钟；workflow_dispatch 可指定一个 Issue 立即处理
+# 【何时跑】每 5 分钟；workflow_dispatch 可指定一个 Issue 立即处理
 on:
   schedule:
-    - cron: "* * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       issue_number:

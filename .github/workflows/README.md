@@ -109,7 +109,7 @@ Supabase → collect → qualify → publish → GitHub Issue → issue-delivery
 
 ### `manual-issue-intake.yml` — 手动 Issue → 原地补充或晋升
 
-**一句话**：每 1 分钟扫描最早的 `content:raw` Issue；信息不足就在原 Issue 评论，信息足够就在原 Issue 写入 Contract 并改为 `content:processed`，不创建新 Issue。
+**一句话**：每 5 分钟扫描最早的 `content:raw` Issue；信息不足就在原 Issue 评论，信息足够就在原 Issue 写入 Contract 并改为 `content:processed`，不创建新 Issue。
 
 - 用户可以只提交一句话，例如“增加关于我们页面”。
 - 用户补充的非机器人评论会随下一轮定时扫描一起作为上下文。
