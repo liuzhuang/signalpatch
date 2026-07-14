@@ -46,6 +46,11 @@ describe("delivery workflow stage boundaries", () => {
         String(step.uses ?? "").startsWith("actions/checkout@"),
     );
     expect(progressCheckout?.with?.["persist-credentials"]).toBe(false);
+    const finishedCheckout = delivery.jobs["mark-codex-finished"].steps.find(
+      (step: { uses?: string; with?: Record<string, unknown> }) =>
+        String(step.uses ?? "").startsWith("actions/checkout@"),
+    );
+    expect(finishedCheckout?.with?.["persist-credentials"]).toBe(false);
     expect(conversationPublisher.permissions.actions).toBeUndefined();
     expect(conversationPublisher.jobs.publish.concurrency.group).toBe(
       "issue-publisher",
