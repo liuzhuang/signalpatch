@@ -41,6 +41,11 @@ describe("delivery workflow stage boundaries", () => {
     expect(delivery.on.issues.types).toEqual(["labeled"]);
     expect(delivery.on.workflow_dispatch).toBeDefined();
     expect(delivery.jobs.prepare.if).toContain("content:processed");
+    const progressCheckout = delivery.jobs["mark-codex-started"].steps.find(
+      (step: { uses?: string; with?: Record<string, unknown> }) =>
+        String(step.uses ?? "").startsWith("actions/checkout@"),
+    );
+    expect(progressCheckout?.with?.["persist-credentials"]).toBe(false);
     expect(conversationPublisher.permissions.actions).toBeUndefined();
     expect(conversationPublisher.jobs.publish.concurrency.group).toBe(
       "issue-publisher",
