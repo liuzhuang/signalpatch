@@ -313,6 +313,7 @@ jobs:
         with:
           name: outcome-contract
           path: .ai/runs/outcome
+      - run: pnpm exec playwright install --with-deps chromium
       # 从触发本 Outcome 的那次 PR Gate Run 下载 preview-smoke 产物（非当前 Run 的 Artifact）。
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
