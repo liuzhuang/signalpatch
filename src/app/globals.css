@@ -1,12 +1,65 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
+  --background: #f7f8fa;
+  --foreground: #171a21;
+  --muted: #5e6673;
+  --line: #d8dde5;
+  --panel: #ffffff;
+  --accent: #c94022;
+  --accent-glow: rgba(201, 64, 34, 0.13);
+  --grid-line: rgba(23, 26, 33, 0.05);
+  --hero-copy: #4e5765;
+  --field-background: #ffffff;
+  --field-line: #aeb7c4;
+  --button-foreground: #ffffff;
+  --error: #b42318;
+  --result-background: #f8f9fb;
+  --result-code: #9a351e;
+  --link: #1c2735;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --background: #07090d;
+    --foreground: #f4f6f8;
+    --muted: #929aa5;
+    --line: #272c35;
+    --panel: #0d1118;
+    --accent: #ff5c35;
+    --accent-glow: rgba(255, 92, 53, 0.14);
+    --grid-line: rgba(255, 255, 255, 0.025);
+    --hero-copy: #bac0c8;
+    --field-background: #090c11;
+    --field-line: #313743;
+    --button-foreground: #150802;
+    --error: #ff8b72;
+    --result-background: #090c11;
+    --result-code: #f6b19f;
+    --link: #d7dbe0;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
   --background: #07090d;
   --foreground: #f4f6f8;
   --muted: #929aa5;
   --line: #272c35;
   --panel: #0d1118;
   --accent: #ff5c35;
+  --accent-glow: rgba(255, 92, 53, 0.14);
+  --grid-line: rgba(255, 255, 255, 0.025);
+  --hero-copy: #bac0c8;
+  --field-background: #090c11;
+  --field-line: #313743;
+  --button-foreground: #150802;
+  --error: #ff8b72;
+  --result-background: #090c11;
+  --result-code: #f6b19f;
+  --link: #d7dbe0;
 }
 
 @theme inline {
@@ -30,13 +83,9 @@ body {
 main {
   min-height: 100vh;
   background:
-    radial-gradient(
-      circle at 72% -10%,
-      rgba(255, 92, 53, 0.14),
-      transparent 32rem
-    ),
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    radial-gradient(circle at 72% -10%, var(--accent-glow), transparent 32rem),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size:
     auto,
     48px 48px,
@@ -73,6 +122,14 @@ footer {
   box-shadow: 0 0 18px var(--accent);
 }
 
+.theme-toggle {
+  float: right;
+  margin-top: -18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--foreground);
+}
+
 h1 {
   margin: 22px 0 12px;
   font-size: clamp(64px, 10vw, 132px);
@@ -87,7 +144,7 @@ h1 span {
 .hero > p {
   max-width: 660px;
   margin: 28px 0 36px;
-  color: #bac0c8;
+  color: var(--hero-copy);
   font-size: 18px;
   line-height: 1.7;
 }
@@ -104,7 +161,7 @@ h1 span {
   padding: 9px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(13, 17, 24, 0.75);
+  background: var(--panel);
 }
 
 .flow i {
@@ -154,7 +211,7 @@ h2 {
 }
 
 label {
-  color: #cfd3d8;
+  color: var(--foreground);
   font: 600 12px/1 var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -163,10 +220,10 @@ label {
 input,
 textarea {
   width: 100%;
-  border: 1px solid #313743;
+  border: 1px solid var(--field-line);
   border-radius: 4px;
   padding: 15px 16px;
-  background: #090c11;
+  background: var(--field-background);
   color: var(--foreground);
   font: 15px/1.6 var(--font-sans);
   outline: none;
@@ -185,7 +242,7 @@ button {
   border-radius: 4px;
   padding: 13px 18px;
   background: var(--accent);
-  color: #150802;
+  color: var(--button-foreground);
   font: 700 14px/1 var(--font-sans);
   cursor: pointer;
 }
@@ -201,7 +258,7 @@ button:disabled {
 }
 
 .error {
-  color: #ff8b72;
+  color: var(--error);
 }
 
 .result {
@@ -210,7 +267,7 @@ button:disabled {
   margin-top: auto;
   padding: 18px;
   border-left: 2px solid var(--accent);
-  background: #090c11;
+  background: var(--result-background);
 }
 
 .result span,
@@ -220,7 +277,7 @@ button:disabled {
 
 .result code {
   overflow-wrap: anywhere;
-  color: #f6b19f;
+  color: var(--result-code);
 }
 
 footer {
@@ -233,7 +290,7 @@ footer {
 
 footer a {
   margin-left: auto;
-  color: #d7dbe0;
+  color: var(--link);
   text-decoration: none;
 }
 

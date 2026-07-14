@@ -1,5 +1,6 @@
 import { FeedbackForm } from "@/components/feedback-form";
 import { StatusForm } from "@/components/status-form";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function Home() {
   return (
@@ -8,6 +9,7 @@ export default function Home() {
         <div className="eyebrow">
           <span /> AI-native issue delivery reference
         </div>
+        <ThemeToggle />
         <h1>
           Signal<span>Patch</span>
         </h1>
