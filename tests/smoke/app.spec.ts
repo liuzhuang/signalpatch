@@ -47,6 +47,21 @@ test("homepage follows the system theme and supports an accessible override", as
   );
 });
 
+test("homepage links to the mock About page", async ({ page }) => {
+  await page.goto("/");
+
+  const aboutLink = page.getByRole("link", { name: "关于" });
+  await expect(aboutLink).toHaveAttribute("href", "/about");
+  await aboutLink.click();
+
+  await expect(page).toHaveURL(/\/about$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "关于我们" }),
+  ).toBeVisible();
+  await expect(page.getByText("SignalPatch", { exact: true })).toBeVisible();
+  await expect(page.getByText("Mock 数据", { exact: true })).toBeVisible();
+});
+
 test("anonymous Feedback returns the same status for exact and padded Tracking IDs", async ({
   request,
 }) => {
