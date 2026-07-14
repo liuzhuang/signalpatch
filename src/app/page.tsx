@@ -2,6 +2,7 @@ import { FeedbackForm } from "@/components/feedback-form";
 import { RandomCopy } from "@/components/random-copy";
 import { StatusForm } from "@/components/status-form";
 import { ThemeToggle } from "@/components/theme-toggle";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,9 @@ export default function Home() {
       <footer>
         <span>不保存完整会话</span>
         <span>Tracking ID 不代表用户身份</span>
+        <span>
+          <Link href="/about">关于</Link>
+        </span>
         <a href="https://github.com/liuzhuang/signalpatch">查看公开仓库</a>
       </footer>
     </main>
