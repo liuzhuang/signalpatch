@@ -15,7 +15,8 @@
     "test:smoke": "node scripts/run-smoke.mjs",
     "validate:sql": "node scripts/ai/validate-sql.mjs supabase/migrations/20260713074941_initial_signalpatch_schema.sql",
     "validate:workflows": "node scripts/ai/validate-workflows.mjs",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm validate:sql && pnpm validate:workflows"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm validate:sql && pnpm validate:workflows",
+    "prepare": "husky"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.2",
@@ -32,6 +33,8 @@
     "ajv": "8.20.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
     "prettier": "3.9.5",
     "supabase": "2.109.1",
     "tailwindcss": "^4",
