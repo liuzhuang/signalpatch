@@ -1,6 +1,6 @@
 name: PR Gate
 
-# 【做什么】PR 每次更新跑 verify/build/AI 审查/预览部署+Smoke；PR 上须通过 4 个 Required Checks
+# 【做什么】PR 每次更新跑 verify/build/AI 审查/预览部署+Smoke；结果供自动化验收，不作为 Ruleset 强制条件
 # 【何时跑】PR 打开、重开、或有新 push 时（无手动触发）
 # 【详见】.github/workflows/README.md
 on:
@@ -69,7 +69,7 @@ jobs:
           path: .ai/runs/gate
           retention-days: 7
 
-  # Required Check 之一：格式、Lint、类型、单测、SQL 与 Workflow 结构校验的统一入口。
+  # 格式、Lint、类型、单测、SQL 与 Workflow 结构校验的统一入口。
   verify:
     needs: trust
     runs-on: ubuntu-latest
@@ -90,7 +90,7 @@ jobs:
       - name: Verify
         run: pnpm verify
 
-  # Required Check 之二：独立执行生产构建，不能用 verify 成功替代可部署性证明。
+  # 独立执行生产构建，不能用 verify 成功替代可部署性证明。
   build:
     needs: trust
     runs-on: ubuntu-latest
@@ -147,7 +147,7 @@ jobs:
             --output-schema .ai/schemas/delivery-output.schema.json \
             --output-last-message .ai/runs/gate/review.json \
             - < .ai/runs/gate/review-prompt.md
-      # decision 必须为 APPROVE；REJECT/REQUEST_CHANGES 会使 Required Check 失败并进入 Outcome Repair 链。
+      # decision 必须为 APPROVE；REJECT/REQUEST_CHANGES 会进入 Outcome Repair 链。
       - name: Require approval
         run: |
           node scripts/ai/validate-json.mjs \
@@ -168,7 +168,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: r2-approval
     steps:
-      # PR 检查名与 automation 路径相同（independent-review），满足 Ruleset 四检查结构。
+      # PR 检查名与 automation 路径相同，便于统一观察两条路径。
       - name: Confirm independent R2 approval
         run: true
 

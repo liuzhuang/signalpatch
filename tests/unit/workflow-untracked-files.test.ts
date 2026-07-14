@@ -32,6 +32,20 @@ describe("delivery workflow stage boundaries", () => {
     ).toEqual(["opened", "synchronize", "reopened"]);
   });
 
+  it("starts Delivery only through the explicit unified dispatch", () => {
+    const delivery = workflow(".github/workflows/issue-delivery.yml");
+    const conversationPublisher = workflow(
+      ".github/workflows/publish-conversation-issues.yml",
+    );
+
+    expect(delivery.on.issues).toBeUndefined();
+    expect(delivery.on.workflow_dispatch).toBeDefined();
+    expect(conversationPublisher.permissions.actions).toBe("write");
+    expect(conversationPublisher.jobs.publish.concurrency.group).toBe(
+      "issue-publisher",
+    );
+  });
+
   it("keeps manual R2 PRs in the owner-only codex lane", () => {
     const gate = workflow(".github/workflows/pr-gate.yml");
     const outcome = workflow(".github/workflows/pr-outcome.yml");

@@ -116,6 +116,9 @@ jobs:
   publish:
     needs: qualify
     runs-on: ubuntu-latest
+    concurrency:
+      group: issue-publisher
+      cancel-in-progress: false
     permissions:
       contents: read
       actions: write
@@ -142,13 +145,13 @@ jobs:
         with:
           name: intake-state
           path: .ai/runs/intake
-      # Installation Token 只存在于本 Job，用于创建 Issue 和显式 dispatch issue-delivery.yml（避免与 issues.opened 重复触发）。
+      # Installation Token 只存在于本 Job，用于 raw → processed、重复关闭和显式 dispatch Delivery。
       - id: app-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.SIGNALPATCH_APP_ID }}
           private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
-      # intake-publish.mjs：NEEDS_EVIDENCE 只更新 Feedback；SPEC_READY 则上调 risk、建 Issue、写 Problem、dispatch Delivery。
+      # intake-publish.mjs：创建 raw Issue；SPEC_READY 原地晋升，重复则评论并关闭，否则 dispatch Delivery。
       - name: Publish validated result
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

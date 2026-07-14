@@ -1,6 +1,6 @@
 # pr-gate.yml 说明
 
-[pr-gate.yml](pr-gate.yml) 在 PR 每次更新时跑 **verify**、**build**、**独立审查**、**预览部署 + Smoke Test**；PR 上须通过 4 个 **Required Checks** 才能合并。整轮结束后触发 [pr-outcome.yml](pr-outcome.yml)（workflow 名 **`PR Gate`**）。
+[pr-gate.yml](pr-gate.yml) 在 PR 每次更新时跑 **verify**、**build**、**独立审查**、**预览部署 + Smoke Test**。4 个检查供自动化验收使用，不由 `main` Ruleset 强制；整轮结束后触发 [pr-outcome.yml](pr-outcome.yml)（Workflow 名为 **`PR Gate`**）。
 
 上游通常为 [issue-delivery.yml.md](issue-delivery.yml.md) 创建的 **Draft PR**。
 
@@ -50,9 +50,9 @@ flowchart TD
 
 Draft PR 创建（`opened`）会触发 Gate；详见 [issue-delivery.yml.md § Draft PR](issue-delivery.yml.md#draft-pr-与普通-pr-的区别)。
 
-### PR 上的 Required Checks
+### PR 上的检查
 
-与 [`.ai/policy.yaml`](../../.ai/policy.yaml) `required_checks` 一致；`main` Ruleset 要求以下 **4 个**在 PR 上显示并通过：
+以下 **4 个**检查会显示在 PR 上；自动化 PR 只有在本轮全部成功后才进入 PR Outcome 的合并和发布步骤：
 
 | 检查名（Job `name:`） | 对应 Job id | 做什么 |
 |----------------------|-------------|--------|
@@ -61,7 +61,7 @@ Draft PR 创建（`opened`）会触发 Gate；详见 [issue-delivery.yml.md § D
 | **independent-review** | `independent-review` 或 `manual-independent-review` | Codex 审查 **或** `r2-approval` 人工环境 |
 | **preview-smoke** | `preview-smoke` | Vercel staged 部署 + Smoke Test |
 
-**`trust` 不是 Required Check**：它是安全前置与证据准备；失败则后续 Job 不跑，但 PR Checks 列表里**不出现** `trust` 这个名字。
+**`trust` 不属于这 4 个检查**：它是安全前置与证据准备；失败时后续 Job 不运行。
 
 ### Job 总览
 
@@ -381,7 +381,7 @@ Outcome **finalize** 下载后 **promote** 此 Deployment，**不**重新 `verce
 
 ## 三、答疑
 
-本节集中回答：**Workflow 开关**（`mode`）、**Required Checks**、**双路径审查**、**staged deployment** 与下游 Outcome。各 Job 逐步操作见 [二、细节](#二细节)。
+本节集中回答：**Workflow 开关**（`mode`）、**PR 检查**、**双路径审查**、**staged deployment** 与下游 Outcome。各 Job 逐步操作见 [二、细节](#二细节)。
 
 ### mode 逻辑
 
@@ -417,11 +417,11 @@ Fork PR、陌生分支、非 Bot 的 `ai/issue-*` 等：`trust` **失败**，整
 
 | | **trust** | **verify / build / independent-review / preview-smoke** |
 |--|-----------|--------------------------------------------------------|
-| **PR 上是否显示** | **否** | **是**（4 个 Required Checks） |
+| **PR 上是否显示** | **否** | **是**（4 个检查） |
 | **作用** | 来源安全、固定 SHA、拉 Contract、定 mode | 可合并门闩 |
-| **失败后果** | 后续 Job 不跑或跳过 | PR 不能合并（Ruleset） |
+| **失败后果** | 后续 Job 不跑或跳过 | 自动化不会进入合并和发布步骤 |
 
-设计意图：用户与 Ruleset 只关心**可验证的质量与运行时证据**；`trust` 是控制器内部安全层，不需要与 `pnpm verify` 并列成第五个检查名。
+设计意图：`trust` 是控制器内部安全层，不需要与 `pnpm verify` 并列成第五个检查名。
 
 ### 为什么有两个 Job 都叫 independent-review
 
@@ -432,7 +432,7 @@ GitHub PR Checks 显示的是 Job 的 **`name:`**，不是 job id：
 | `independent-review` | `independent-review` | `mode == automation` |
 | `manual-independent-review` | **`independent-review`** | `mode == manual` |
 
-同一 PR **只会跑其中一个**（另一个 Skipped），但 PR 上始终只看到 **一个** `independent-review` 检查，满足 Ruleset 四项中的「独立审查」项。
+同一 PR **只会跑其中一个**（另一个 Skipped），PR 上始终只看到 **一个** `independent-review` 检查。
 
 ### preview-smoke 的 if 条件
 
@@ -466,7 +466,7 @@ preview-smoke 构建并部署（skip-domain）
 
 **不**在 Outcome 里重新 `vercel build`，避免「Gate 测的」与「上线的」不是同一份产物。
 
-### Required Checks 与风险等级
+### PR 检查与风险等级
 
 - 4 个检查对 **R0/R1/R2** automation PR **都要过**；合并策略差异在 **pr-outcome**（R0/R1 自动合并，R2 须人批）。
 - **manual** `codex/*` 路径 trust 固定 **R2**；`manual-independent-review` 使用 **`r2-approval`** Environment。
@@ -503,5 +503,5 @@ Gate **成功或失败**都会触发 Outcome；取消的 Gate 也会产生 Outco
 | [prepare-issue.mjs](../../scripts/controllers/prepare-issue.mjs) | trust 拉 Contract |
 | [record-run.mjs](../../scripts/controllers/record-run.mjs) | preview Automation Run |
 | [run-smoke.mjs](../../scripts/run-smoke.mjs) | Playwright Smoke 入口 |
-| [.ai/policy.yaml](../../.ai/policy.yaml) | `required_checks` 列表 |
+| [.ai/policy.yaml](../../.ai/policy.yaml) | 风险、保护路径与 Codex Sandbox 规则 |
 | [docs/codex-manual-operations.md](../../docs/codex-manual-operations.md) | Gate 运维与历史 Run 说明 |

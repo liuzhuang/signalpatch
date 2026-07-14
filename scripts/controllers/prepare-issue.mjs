@@ -26,10 +26,10 @@ const issue = await requestJson(
 );
 
 ////////////////////////////////////////////////////
-// Delivery 只接收带 SignalPatch 自动化标签且正文包含标准 Contract 标记的 Issue
+// Delivery 只接收已完成 Intake 且正文包含标准 Contract 标记的 processed Issue
 ////////////////////////////////////////////////////
-if (!issue.labels.some((label) => label.name.startsWith("ai:"))) {
-  throw new Error("Issue does not have a SignalPatch automation label");
+if (!issue.labels.some((label) => label.name === "content:processed")) {
+  throw new Error("Issue is not a processed SignalPatch Issue");
 }
 const match = issue.body?.match(
   /<!-- signalpatch-contract:start -->\s*```json\s*([\s\S]*?)\s*```\s*<!-- signalpatch-contract:end -->/,

@@ -9,7 +9,6 @@ import { describe, expect, it } from "vitest";
 import {
   assertConversationContract,
   assertConversationRequest,
-  issueBodyForRequest,
   newConversationRequest,
 } from "../../scripts/controllers/lib/conversation-issue.mjs";
 
@@ -50,7 +49,7 @@ function contract() {
 }
 
 describe("conversation issue queue", () => {
-  it("accepts a confirmed conversation contract and renders an idempotency marker", () => {
+  it("accepts a confirmed conversation contract", () => {
     const request = newConversationRequest(
       contract(),
       "2026-07-13T12:00:00.000Z",
@@ -60,9 +59,6 @@ describe("conversation issue queue", () => {
       request.contract,
     );
     expect(assertConversationRequest(request)).toEqual(request);
-    expect(issueBodyForRequest(request)).toContain(
-      `signalpatch-conversation-request:${request.requestId}`,
-    );
   });
 
   it("rejects a contract without explicit confirmation", () => {

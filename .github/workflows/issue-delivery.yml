@@ -1,11 +1,9 @@
 name: Issue Delivery
 
 # 【做什么】读 Issue 里的 Contract → Codex 改代码 → 机器人推分支并开 Draft PR（R3 则只分析不改码）
-# 【何时跑】Issue 被创建时（对话来源）；或 Feedback Intake 完成后 dispatch（带 issue_number）
+# 【何时跑】Feedback/Codex 发布器把同一个 Issue 晋升为 processed 后显式 dispatch
 # 【详见】.github/workflows/README.md
 on:
-  issues:
-    types: [opened]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -18,7 +16,7 @@ permissions:
   contents: read
   issues: read
 
-# 同一个 Issue 的重复 opened/dispatch 事件串行执行，避免并发创建两个 AI 分支或 PR。
+# 同一个 Issue 的重复 dispatch 串行执行，避免并发创建两个 AI 分支或 PR。
 concurrency:
   group: issue-delivery-${{ inputs.issue_number || github.event.issue.number }}
   cancel-in-progress: false
@@ -43,20 +41,14 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # prepare-issue.mjs 从 Issue 正文提取 contract.json + issue.json；shell 再算 proceed（Feedback+issues.opened 时 false）。
+      # prepare-issue.mjs 只接受 content:processed，并从正文提取 contract.json + issue.json。
       - id: context
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
-          TRIGGER: ${{ github.event_name }}
         run: |
           node scripts/controllers/prepare-issue.mjs "$ISSUE_NUMBER" .ai/runs/delivery
-          source_kind=$(node -e 'const c=require("./.ai/runs/delivery/contract.json"); process.stdout.write(c.source.kind)')
           proceed=true
-          # Feedback 创建 Issue 时还会产生 issues.opened；真正构建只由 Intake 的显式 dispatch 负责，防止双跑。
-          if [[ "$TRIGGER" == "issues" && "$source_kind" == "feedback" ]]; then
-            proceed=false
-          fi
           risk_level=$(node -e 'const c=require("./.ai/runs/delivery/contract.json"); process.stdout.write(c.riskLevel)')
           echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
           echo "proceed=$proceed" >> "$GITHUB_OUTPUT"

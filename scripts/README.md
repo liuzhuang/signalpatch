@@ -44,7 +44,7 @@ flowchart TD
 
 ## 2. 文件作用清单
 
-共 **23 个文件**（19 个可执行 CLI + 4 个库模块）。
+共 **24 个文件**（19 个可执行 CLI + 5 个库模块）。
 
 ### 2.1 根目录
 
@@ -73,15 +73,16 @@ flowchart TD
 | 文件 | 类型 | 作用 |
 |------|------|------|
 | [`intake-collect.mjs`](controllers/intake-collect.mjs) | CLI | 从 Supabase 原子认领一条 `PENDING` Feedback；写出脱敏 `evidence.json` 与控制器 `state.json` |
-| [`intake-publish.mjs`](controllers/intake-publish.mjs) | CLI | 处理 Intake 结果：`NEEDS_EVIDENCE` 时重置 Feedback；`SPEC_READY` 时创建 GitHub Issue、Supabase Problem，并 dispatch Issue Delivery |
-| [`prepare-issue.mjs`](controllers/prepare-issue.mjs) | CLI | 从 GitHub Issue 提取 `signalpatch-contract` 标记块；校验自动化标签；写出 `contract.json` 与最小 `issue.json` |
+| [`intake-publish.mjs`](controllers/intake-publish.mjs) | CLI | 创建 raw Issue；`NEEDS_EVIDENCE` 保留 raw，`SPEC_READY` 原地晋升 processed；重复时评论并关闭，否则 dispatch Issue Delivery |
+| [`prepare-issue.mjs`](controllers/prepare-issue.mjs) | CLI | 从 processed GitHub Issue 提取 `signalpatch-contract` 标记块；写出 `contract.json` 与最小 `issue.json` |
 | [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs) | CLI | 校验已确认 Contract，原子写入本地 `pending/` 队列（`.tmp` → rename） |
-| [`publish-conversation-issues.mjs`](controllers/publish-conversation-issues.mjs) | CLI | 消费本地队列：校验 Request、上调风险、UUID 防重后创建 GitHub Issue |
+| [`publish-conversation-issues.mjs`](controllers/publish-conversation-issues.mjs) | CLI | 消费本地队列：校验 Request、创建 raw Issue、精确去重、晋升 processed 并 dispatch Issue Delivery |
 | [`record-run.mjs`](controllers/record-run.mjs) | CLI | 幂等写入 Supabase `automation_runs`；按阶段更新 Problem 的 Repair Status |
 | [`final-comment.mjs`](controllers/final-comment.mjs) | CLI | 生成 Production 验收通过 Issue 评论（PR、Commit、Preview/Production URL、各 Acceptance Criterion） |
 | [`cleanup-smoke.mjs`](controllers/cleanup-smoke.mjs) | CLI | 按 tracking ID 列表文件，删除 Supabase 中标记为 synthetic 的 Feedback |
 | [`lib/http.mjs`](controllers/lib/http.mjs) | **库** | 带 30s 超时的 `fetch` JSON 封装；脱敏 HTTP 错误；批量校验环境变量 |
 | [`lib/conversation-issue.mjs`](controllers/lib/conversation-issue.mjs) | **库** | Issue Contract Schema 校验；对话来源显式确认引用；Request/Issue Body 生成 |
+| [`lib/issue-lifecycle.mjs`](controllers/lib/issue-lifecycle.mjs) | **库** | raw/processed 标签、Problem 指纹、Issue 精确去重、重复关闭和 Delivery dispatch |
 | [`lib/run-status.mjs`](controllers/lib/run-status.mjs) | **库** | Automation Run 阶段（preview / production 等）到面向用户的 Repair Status 映射 |
 
 ---
@@ -185,9 +186,9 @@ node scripts/controllers/publish-conversation-issues.mjs
 
 | 文档 | 说明 |
 |------|------|
-| [`.github/workflows/README.md`](../.github/workflows/README.md) | 五个 Workflow 的 Job、触发器与 Required Checks |
+| [`.github/workflows/README.md`](../.github/workflows/README.md) | 五个 Workflow 的 Job、触发器与 PR 检查 |
 | [`AGENTS.md`](../AGENTS.md) | Codex 硬约束与 enqueue 授权 |
-| [`.ai/policy.yaml`](../.ai/policy.yaml) | 风险规则、Repair 次数、Required Checks 名称 |
+| [`.ai/policy.yaml`](../.ai/policy.yaml) | 风险规则、Repair 次数与 Codex Sandbox |
 | [`docs/setup.md`](../docs/setup.md) | Ruleset、Runner、Secrets 配置 |
 | [`docs/runbook.md`](../docs/runbook.md) | 运维与 `cleanup-smoke.mjs` 人工用法 |
 | [`docs/codex-manual-operations.md`](../docs/codex-manual-operations.md) | 手动诊断 Intake/Delivery/Repair |

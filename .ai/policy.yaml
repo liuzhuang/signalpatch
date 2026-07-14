@@ -10,14 +10,6 @@ automation:
   human_approval_risks: [R2]
   analysis_only_risks: [R3]
 
-# 名称必须与 PR Gate 暴露给 GitHub Ruleset 的检查名一致。
-# Ruleset 在 GitHub 服务端强制这些检查；本数组本身不会创建或执行检查。
-required_checks:
-  - verify
-  - build
-  - independent-review
-  - preview-smoke
-
 # validate-diff.mjs 根据实际修改路径计算最低风险，只允许在 Issue Contract 的提议上调。
 # 同一路径命中多级规则时取 R0 < R1 < R2 < R3 中最高的一级。
 risk_rules:

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 【做什么】消费本地对话队列，校验 Contract 后创建 GitHub Issue（UUID 防重复）
+// 【做什么】消费本地对话队列，发布 raw Issue，去重后晋升 processed 并 dispatch Delivery
 // 【何时跑】publish-conversation-issues.yml；亦可本地手动（需 GH_TOKEN）
 import {
   mkdir,
@@ -13,12 +13,12 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { assertConversationRequest } from "./lib/conversation-issue.mjs";
+import { requireEnvironment } from "./lib/http.mjs";
 import {
-  assertConversationRequest,
-  issueBodyForRequest,
-  issueLabelsForRequest,
-} from "./lib/conversation-issue.mjs";
-import { requestJson, requireEnvironment } from "./lib/http.mjs";
+  dispatchIssueDelivery,
+  publishContractIssue,
+} from "./lib/issue-lifecycle.mjs";
 import { loadPolicy, requiredRisk } from "../ai/lib/policy.mjs";
 
 const queueDirectory =
@@ -61,53 +61,30 @@ async function loadRequest(path) {
   return assertConversationRequest(JSON.parse(await readFile(path, "utf8")));
 }
 
-function headers(token) {
-  return {
-    accept: "application/vnd.github+json",
-    authorization: `Bearer ${token}`,
-    "content-type": "application/json",
-    "x-github-api-version": "2022-11-28",
-  };
-}
-
-async function findPublishedIssue(repository, token, requestId) {
-  ////////////////////////////////////////////////////
-  // 请求 UUID 写入 Issue 隐藏标记；重试发布前先搜索该标记以避免重复 Issue
-  ////////////////////////////////////////////////////
-  const marker = `signalpatch-conversation-request:${requestId}`;
-  const url = new URL("https://api.github.com/search/issues");
-  url.searchParams.set("q", `repo:${repository} in:body ${marker}`);
-  const result = await requestJson(url, { headers: headers(token) });
-  return result.items.find((item) => item.body?.includes(marker)) ?? null;
-}
-
 async function publishRequest(request, repository, token) {
-  const existing = await findPublishedIssue(
+  const result = await publishContractIssue({
     repository,
     token,
-    request.requestId,
-  );
-  if (existing) {
-    return existing;
-  }
-  return requestJson(`https://api.github.com/repos/${repository}/issues`, {
-    method: "POST",
-    headers: headers(token),
-    body: JSON.stringify({
-      title: `[SignalPatch] ${request.contract.problemSummary}`,
-      body: issueBodyForRequest(request),
-      labels: issueLabelsForRequest(request),
-    }),
+    contract: request.contract,
+    idempotencyMarker: `signalpatch-conversation-request:${request.requestId}`,
   });
+  if (!result.duplicate) {
+    await dispatchIssueDelivery(repository, token, result.issue.number);
+  }
+  return result;
 }
 
-async function complete(path, request, issue) {
+async function complete(path, request, result) {
   ////////////////////////////////////////////////////
   // 回执先原子写入 completed，再删除 processing 文件，成功结果因此可审计
   ////////////////////////////////////////////////////
   const receipt = {
     ...request,
-    result: { issueNumber: issue.number, issueUrl: issue.html_url },
+    result: {
+      issueNumber: result.issue.number,
+      issueUrl: result.issue.html_url,
+      duplicateOf: result.duplicate?.number ?? null,
+    },
   };
   const destination = join(completedDirectory, `${request.requestId}.json`);
   await writeFile(
@@ -167,10 +144,10 @@ try {
       request.contract.allowedPaths,
       request.contract.riskLevel,
     );
-    const issue = await publishRequest(request, GITHUB_REPOSITORY, GH_TOKEN);
-    await complete(path, request, issue);
+    const result = await publishRequest(request, GITHUB_REPOSITORY, GH_TOKEN);
+    await complete(path, request, result);
     process.stdout.write(
-      `${JSON.stringify({ requestId: request.requestId, issueNumber: issue.number, issueUrl: issue.html_url })}\n`,
+      `${JSON.stringify({ requestId: request.requestId, issueNumber: result.issue.number, issueUrl: result.issue.html_url, duplicateOf: result.duplicate?.number ?? null })}\n`,
     );
   }
 } finally {

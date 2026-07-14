@@ -144,15 +144,12 @@ Repository permissions：
 为 `main` 创建分支 Ruleset：
 
 - 禁止删除和强制推送。
-- 要求 Pull Request。
-- 要求 `verify`、`build`、`independent-review`、`preview-smoke` 通过。
-- 允许安装后的 `signalpatch-automation` GitHub App 完成合并。
-
-初次配置阶段可在 Workflow 尚未产生检查名时暂缓启用 Required checks；四个检查各成功运行一次后立即收紧。
+- 不要求 Pull Request，允许正常 fast-forward push 到 `main`。
+- 不配置 Required status checks。PR Gate 仍运行 `verify`、`build`、`independent-review` 和 `preview-smoke`，结果只供自动化验收与排障使用。
 
 Ruleset 在 GitHub 仓库服务端配置，不保存在仓库中的 YAML 文件。配置入口为 `Settings -> Rules -> Rulesets`；旧版分支保护入口为 `Settings -> Branches -> Branch protection rules`。`.github/workflows/*.yml` 只定义检查如何运行，不能解除 `main` 的保护规则。
 
-直接执行 `git push origin main` 时，Ruleset 会拒绝推送并返回 `GH013`。应将本地提交推送到非 `main` 分支，创建 Pull Request，等待四个 Required Checks 通过后再合并。不要通过强制推送绕过规则。
+直接执行普通 `git push origin main` 应成功；删除 `main` 或使用强制推送仍会被 Ruleset 拒绝。
 
 ## 自托管 macOS Runner
 

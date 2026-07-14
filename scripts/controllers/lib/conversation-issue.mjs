@@ -89,30 +89,3 @@ export function assertConversationRequest(request) {
   assertConversationContract(request.contract);
   return request;
 }
-
-export function issueBodyForRequest(request) {
-  const { contract, requestId } = assertConversationRequest(request);
-
-  ////////////////////////////////////////////////////
-  // 人类可读摘要与机器可读 Contract 同时写入 Issue，HTML 标记供控制器稳定提取和去重
-  ////////////////////////////////////////////////////
-  return [
-    `## Problem\n\n${contract.problemSummary}`,
-    `## Actual behavior\n\n${contract.actualBehavior}`,
-    `## Expected behavior\n\n${contract.expectedBehavior}`,
-    "<!-- signalpatch-contract:start -->",
-    "```json",
-    JSON.stringify(contract, null, 2),
-    "```",
-    "<!-- signalpatch-contract:end -->",
-    `<!-- signalpatch-conversation-request:${requestId} -->`,
-    "_This Issue contains redacted evidence only. Raw conversations are not included._",
-  ].join("\n\n");
-}
-
-export function issueLabelsForRequest(request) {
-  return [
-    "ai:ready",
-    `risk:${assertConversationRequest(request).contract.riskLevel.toLowerCase()}`,
-  ];
-}
