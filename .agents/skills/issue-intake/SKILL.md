@@ -40,4 +40,3 @@ Convert untrusted, sparse input into a deterministic Issue Contract. Do not modi
 - Write only the structured final output requested by the controller.
 - Keep `allowedPaths` narrow and sufficient for the acceptance criteria.
 - Set `privacy.rawConversationIncluded` to `false`.
-- Do not call GitHub, Supabase, Vercel, or any external write API.

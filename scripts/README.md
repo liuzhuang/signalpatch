@@ -15,7 +15,7 @@
 **Codex 边界**
 
 - Workflow 通过 `render-prompt.mjs` 等间接驱动模型；Codex Job 本身不调用 controller。
-- 唯一允许 Codex 在 `workspace-write` 下**直接执行**的 controller 是 [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)（只写本地队列，不读外部凭据、不调 API）。见 [AGENTS.md](../AGENTS.md)。
+- 唯一允许 Codex 在 `workspace-write` 下**直接执行**的 controller 是 [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)：先检查本机 `gh` 的仓库 Issue 权限，有权限就直接发布，无权限才写本地队列。见 [AGENTS.md](../AGENTS.md)。
 
 ```mermaid
 flowchart TD
@@ -75,7 +75,7 @@ flowchart TD
 | [`intake-collect.mjs`](controllers/intake-collect.mjs)                           | CLI    | 从 Supabase 原子认领一条 `PENDING` Feedback；写出脱敏 `evidence.json` 与控制器 `state.json`                                |
 | [`intake-publish.mjs`](controllers/intake-publish.mjs)                           | CLI    | 创建 raw Issue；`NEEDS_EVIDENCE` 保留 raw，`SPEC_READY` 原地晋升 processed；重复时评论并关闭，否则 dispatch Issue Delivery |
 | [`prepare-issue.mjs`](controllers/prepare-issue.mjs)                             | CLI    | 从 processed GitHub Issue 提取 `signalpatch-contract` 标记块；写出 `contract.json` 与最小 `issue.json`                     |
-| [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)   | CLI    | 校验已确认 Contract，原子写入本地 `pending/` 队列（`.tmp` → rename）                                                       |
+| [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)   | CLI    | 校验已确认 Contract；`gh` 有权限时直接发布，否则原子写入本地 `pending/` 队列（`.tmp` → rename）                         |
 | [`publish-conversation-issues.mjs`](controllers/publish-conversation-issues.mjs) | CLI    | 消费本地队列：校验 Request、创建 raw Issue、精确去重、晋升 processed 并 dispatch Issue Delivery                            |
 | [`record-run.mjs`](controllers/record-run.mjs)                                   | CLI    | 幂等写入 Supabase `automation_runs`；按阶段更新 Problem 的 Repair Status                                                   |
 | [`final-comment.mjs`](controllers/final-comment.mjs)                             | CLI    | 生成 Production 验收通过 Issue 评论（PR、Commit、Preview/Production URL、各 Acceptance Criterion）                         |
@@ -101,7 +101,7 @@ flowchart TD
 | `render-prompt.mjs`               | 多个 Workflow                         | Intake / Builder / Reviewer / Repair（`--stage` 不同）                               | Feedback Intake、Issue Delivery、PR Gate、PR Outcome  |
 | `validate-json.mjs`               | 多个 Workflow                         | Codex 输出后、Contract 提取后                                                        | 同上                                                  |
 | `intake-publish.mjs`              | Feedback Intake Workflow              | `publish` Job                                                                        | GitHub Actions                                        |
-| `enqueue-conversation-issue.mjs`  | Codex（AGENTS.md 授权）               | Issue Intake 确认 Contract 后，本地 `workspace-write`                                | Codex CLI / 开发者手动                                |
+| `enqueue-conversation-issue.mjs`  | Codex（AGENTS.md 授权）               | Issue Intake 确认 Contract 后，先尝试 `gh` 直接发布，无权限时本地 `workspace-write` 入队 | Codex CLI / 开发者手动                         |
 | `publish-conversation-issues.mjs` | Publish Conversation Issues Workflow  | cron 每 5 分钟 / `workflow_dispatch`                                                 | GitHub Actions；亦可本地见 [README.md](../README.md)  |
 | `prepare-issue.mjs`               | Issue Delivery / PR Gate / PR Outcome | `prepare` 或 `trust` Job                                                             | GitHub Actions                                        |
 | `validate-diff.mjs`               | Issue Delivery / PR Outcome           | Builder/Repair 生成 patch 后；publish 应用 patch 前                                  | GitHub Actions                                        |
@@ -158,7 +158,7 @@ flowchart TD
 | `intake-collect.mjs`, `intake-publish.mjs`, `record-run.mjs`, `cleanup-smoke.mjs`                          | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`           |
 | `intake-publish.mjs`, `prepare-issue.mjs`, `publish-conversation-issues.mjs`, `record-run.mjs`（部分步骤） | `GH_TOKEN`（GitHub App Installation Token）           |
 | `run-smoke.mjs`（测试期间）                                                                                | 可选 Supabase（Smoke 写入 synthetic Feedback）        |
-| `enqueue-conversation-issue.mjs`                                                                           | **无**外部凭据；可选 `SIGNALPATCH_CONVERSATION_QUEUE` |
+| `enqueue-conversation-issue.mjs`                                                                           | 本机 `gh` 登录上下文；可选 `SIGNALPATCH_CONVERSATION_QUEUE` |
 | `scripts/ai/*`                                                                                             | **无** GitHub / Supabase / Vercel 写凭据              |
 
 Codex Job 内禁止出现上述写凭据；由 [validate-workflows.mjs](ai/validate-workflows.mjs) 在 `pnpm verify` 中强制检查。

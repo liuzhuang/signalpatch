@@ -1,6 +1,6 @@
 # 两种 Issue 来源使用不同入口
 
-Codex 多轮对话在用户明确确认一次后，由 Codex 将 Issue Contract 写入本地队列。`publish-conversation-issues.yml` 使用确定性 Controller 创建 `content:raw` Issue；非重复时在同一个 Issue 上改为 `content:processed`，并显式启动 Delivery。
+Codex 多轮对话在用户明确确认一次后，先检查本机 `gh` 是否拥有仓库 Issue 写权限；有权限时直接复用统一发布生命周期创建 Issue 并启动 Delivery，没有权限时才将 Issue Contract 写入本地队列，由 `publish-conversation-issues.yml` 使用确定性 Controller 创建 `content:raw` Issue。非重复时在同一个 Issue 上改为 `content:processed`，并显式启动 Delivery。
 
 应用内 Feedback 只由 Next.js API 写入 Supabase。`feedback-intake.yml` 定时扫描未处理 Feedback，也支持 `workflow_dispatch` 立即扫描。Intake Agent 使用 `issue-intake` Skill 生成脱敏结果；Controller 创建 `content:raw` Issue，达到 `SPEC_READY` 后在同一个 Issue 上改为 `content:processed`。
 

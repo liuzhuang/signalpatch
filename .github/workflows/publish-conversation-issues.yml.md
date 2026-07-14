@@ -1,6 +1,6 @@
 # publish-conversation-issues.yml 说明
 
-[publish-conversation-issues.yml](publish-conversation-issues.yml) 是 **Codex 对话入口**的发布阶段：从 **Mac 本地队列**读取已确认的 `codex-conversation` Issue Contract，创建 `content:raw` Issue。非重复时在同一个 Issue 上改为 `content:processed` 并显式 dispatch [issue-delivery.yml](issue-delivery.yml)；重复时评论 canonical Issue 并关闭当前 Issue。
+[publish-conversation-issues.yml](publish-conversation-issues.yml) 是 **Codex 对话入口**的兜底发布阶段：读取 **Mac 本地队列**中未能用本机 `gh` 直接发布的 `codex-conversation` Issue Contract，创建 `content:raw` Issue。非重复时在同一个 Issue 上改为 `content:processed` 并显式 dispatch [issue-delivery.yml](issue-delivery.yml)；重复时评论 canonical Issue 并关闭当前 Issue。
 
 网站 Feedback 入口见 [feedback-intake.yml.md](feedback-intake.yml.md)；Delivery 见 [issue-delivery.yml.md](issue-delivery.yml.md)。
 
@@ -16,7 +16,7 @@
 
 | 阶段 | 谁跑 | 做什么 | 凭据 |
 |------|------|--------|------|
-| **Intake + 入队** | Codex（`read-only` → 确认后 `workspace-write`） | 生成 Issue Contract → [`enqueue-conversation-issue.mjs`](../../scripts/controllers/enqueue-conversation-issue.mjs) 写本地 `pending/` | **无** GitHub / Supabase |
+| **Intake + 发布/入队** | Codex（`read-only` → 确认后 `workspace-write`） | 生成 Issue Contract → 先尝试本机 `gh` 直接发布；无权限时由 [`enqueue-conversation-issue.mjs`](../../scripts/controllers/enqueue-conversation-issue.mjs) 写本地 `pending/` | 本机 `gh` 登录上下文（仅直接路径） |
 | **发布**（本 Workflow） | 自托管 Mac + App Token | [`publish-conversation-issues.mjs`](../../scripts/controllers/publish-conversation-issues.mjs) 消费队列 → 创建 Issue | **GH_TOKEN**（GitHub App） |
 
 ```mermaid
@@ -57,7 +57,7 @@ flowchart LR
 | **需求来源** | 网站 Supabase Feedback | Codex 对话 + **显式用户确认** |
 | **Contract `source.kind`** | `feedback` | **`codex-conversation`** |
 | **Intake** | Workflow 内 Codex qualify | 对话侧 Codex（Skill `$issue-intake`） |
-| **创建 Issue** | `intake-publish.mjs`（云 Runner） | **本 Workflow**（Mac Runner） |
+| **创建 Issue** | `intake-publish.mjs`（云 Runner） | Codex 有 `gh` 权限时直接发布；否则 **本 Workflow**（Mac Runner） |
 | **启动 Delivery** | publish 里 **`workflow_dispatch`** | publish 里 **`workflow_dispatch`** |
 
 两条入口最终 Issue 正文格式相同（`signalpatch-contract` JSON 块），下游 Gate / Outcome **只认 Contract**。
@@ -107,7 +107,7 @@ flowchart LR
 | `GITHUB_REPOSITORY` | `github.repository` | 目标仓库 |
 | `SIGNALPATCH_CONVERSATION_QUEUE` | 可选；Runner 环境 | 覆盖默认队列路径 |
 
-**Codex 不得**获得 `GH_TOKEN` 或 `GITHUB_REPOSITORY`（见 [AGENTS.md](../../AGENTS.md)）。
+Workflow 发布路径中的 `GH_TOKEN` 和 `GITHUB_REPOSITORY` 仍只注入发布 Job；直接路径使用本机 `gh` 的登录上下文，不读取这两个环境变量。
 
 ---
 
@@ -123,7 +123,8 @@ node scripts/controllers/enqueue-conversation-issue.mjs .ai/runs/conversation/co
 
 1. 读取 Contract JSON。
 2. 调用 [`newConversationRequest`](../../scripts/controllers/lib/conversation-issue.mjs) → 生成 `requestId`（UUID）、`submittedAt`、校验 Contract。
-3. 原子写入 `pending/{requestId}.json`（先 `.tmp` 再 `rename`）。
+3. 用 `gh repo view` 检查仓库 `viewerPermission`；权限为 `WRITE`、`MAINTAIN` 或 `ADMIN` 时，使用本机 `gh auth token` 复用统一发布生命周期并直接启动 Delivery。`READ`/`TRIAGE` 仅具备部分 Issue 能力，统一走队列兜底。
+4. `gh` 不可用、未登录或没有 Issue 写权限时，原子写入 `pending/{requestId}.json`（先 `.tmp` 再 `rename`）。
 
 输出示例：`{ "requestId": "...", "state": "QUEUED" }`。
 
@@ -250,15 +251,15 @@ stdout 每成功一条输出一行 JSON：`{ requestId, issueNumber, issueUrl, d
 
 生产环境建议：队列放在 **专用共享组目录**，Codex 身份仅写 `pending/`，发布身份拥有完整队列与 `GH_TOKEN`。
 
-### 为什么 Codex 不直接创建 GitHub Issue
+### 为什么仍保留队列发布路径
 
-与 Feedback Intake 相同的安全模型（见 [AGENTS.md](../../AGENTS.md)）：
+队列是 `gh` 直接路径不可用时的兜底（见 [AGENTS.md](../../AGENTS.md)）：
 
-1. Codex 在 **read-only / workspace-write** 下运行，**不得**持有 GitHub App Token。
-2. 创建 Issue 是 **外部写 API**，必须由 **确定性 controller** 在独立 Job 执行。
+1. 本机 `gh` 未登录或只有读取权限时，Codex 不能直接发布。
+2. 队列把 Contract 交给独立发布身份，兜底路径不依赖 Codex 的 GitHub App Token。
 3. 发布前 **重新校验** Schema、显式确认引用、**上调**风险，防止被篡改的队列文件直接进仓库。
 
-Codex **唯一**例外：`enqueue-conversation-issue.mjs` 只写本地文件，不调 API。
+Codex **唯一**例外：`enqueue-conversation-issue.mjs` 可使用本机 `gh` 登录上下文直接创建并推进 Issue；没有权限时只写本地文件，后续由本 Workflow 使用 GitHub App Token 发布。
 
 ### conversation:explicit-user-confirmation 是什么
 

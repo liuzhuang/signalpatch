@@ -1,6 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -92,6 +99,11 @@ describe("conversation issue queue", () => {
       join(tmpdir(), "signalpatch-conversation-"),
     );
     const contractPath = join(directory, "contract.json");
+    const binDirectory = join(directory, "bin");
+    await mkdir(binDirectory);
+    const ghPath = join(binDirectory, "gh");
+    await writeFile(ghPath, "#!/bin/sh\nexit 1\n");
+    await chmod(ghPath, 0o755);
     await writeFile(contractPath, `${JSON.stringify(contract())}\n`);
     const environment = { ...process.env };
     delete environment.GH_TOKEN;
@@ -106,6 +118,7 @@ describe("conversation issue queue", () => {
           encoding: "utf8",
           env: {
             ...environment,
+            PATH: binDirectory,
             SIGNALPATCH_CONVERSATION_QUEUE: join(directory, "queue"),
           },
         },
