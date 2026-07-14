@@ -10,7 +10,7 @@
 
 ### 这份 Workflow 做什么
 
-Workflow 拆成五个 Job：**prepare → build / analyze-r3 → publish / publish-r3**。凭据按 Job 隔离：Codex 在 Mac 上只有 `workspace-write` 或 `read-only`；GitHub App Token、Supabase Service Role 只在云 Runner 的 publish 类 Job 出现。
+Workflow 拆成七个 Job：**prepare → mark-codex-started → build / analyze-r3 → mark-codex-finished → publish / publish-r3**。凭据按 Job 隔离：Codex 在 Mac 上只有 `workspace-write` 或 `read-only`；GitHub App Token、Supabase Service Role 只在云 Runner 的 Controller Job 出现。
 
 ```mermaid
 flowchart LR
@@ -23,10 +23,13 @@ flowchart LR
   PR[Draft PR]
 
   ISS --> PRE
-  PRE -->|proceed + R0-R2| BLD
-  PRE -->|proceed + R3| R3
-  BLD --> PUB --> PR
-  R3 --> R3P
+  PRE --> MARK[mark-codex-started\nIssue: ai:building + 开始时间]
+  MARK -->|proceed + R0-R2| BLD
+  MARK -->|proceed + R3| R3
+  BLD --> END[mark-codex-finished\n结束时间 + ai:verifying]
+  R3 --> END
+  END --> PUB --> PR
+  END --> R3P
   PRE -->|proceed false| SKIP[跳过 build 与 R3]
 ```
 
@@ -44,25 +47,28 @@ flowchart LR
 
 ### Job 总览
 
-| Job            | Runner          | 用途（一句话）                                                     | 何时跳过                                |
-| -------------- | --------------- | ------------------------------------------------------------------ | --------------------------------------- |
-| **prepare**    | `ubuntu-latest` | 验证 processed 标签、提取 Contract、计算 `risk_level`、Schema 校验 | 从不跳过                                |
-| **build**      | 自托管 macOS    | Codex **改代码**，policy 校验，生成 patch                          | `proceed != true` 或 `risk_level == R3` |
-| **analyze-r3** | 自托管 macOS    | Codex **只读**分析 R3 Issue                                        | `proceed != true` 或 `risk_level != R3` |
-| **publish**    | `ubuntu-latest` | 应用 patch、推分支、开 Draft PR、`record-run`                      | `build` 未运行或失败                    |
-| **publish-r3** | `ubuntu-latest` | Issue 评论 + 转人工标签                                            | `analyze-r3` 未运行或失败               |
+| Job                     | Runner          | 用途（一句话）                                                     | 何时跳过                                |
+| ----------------------- | --------------- | ------------------------------------------------------------------ | --------------------------------------- |
+| **prepare**             | `ubuntu-latest` | 验证 processed 标签、提取 Contract、计算 `risk_level`、Schema 校验 | 从不跳过                                |
+| **mark-codex-started**  | `ubuntu-latest` | Issue 标记 `ai:building`，写入 Codex 开始时间                      | `prepare` 未通过                        |
+| **build**               | 自托管 macOS    | Codex **改代码**，policy 校验，生成 patch                          | `proceed != true` 或 `risk_level == R3` |
+| **analyze-r3**          | 自托管 macOS    | Codex **只读**分析 R3 Issue                                        | `proceed != true` 或 `risk_level != R3` |
+| **mark-codex-finished** | `ubuntu-latest` | 写入 Codex 结束时间，成功转 `ai:verifying`，失败转人工             | Codex Job 未运行                        |
+| **publish**             | `ubuntu-latest` | 应用 patch、推分支、开 Draft PR、`record-run`                      | `build` 未运行或失败                    |
+| **publish-r3**          | `ubuntu-latest` | Issue 评论 + 转人工标签                                            | `analyze-r3` 未运行或失败               |
 
 ### Job 之间如何传参
 
-| 从             | 到                 | 机制                               | 传递内容                                       |
-| -------------- | ------------------ | ---------------------------------- | ---------------------------------------------- |
-| prepare        | build / analyze-r3 | `needs` + `proceed` + `risk_level` | 是否继续、走哪条路径                           |
-| prepare        | 下游               | Artifact `issue-{n}-contract`      | Contract + issue 快照                          |
-| build          | publish            | Artifact `issue-{n}-build`         | patch + result.json                            |
-| analyze-r3     | publish-r3         | Artifact `issue-{n}-r3-analysis`   | R3 JSON                                        |
-| publish        | pr-gate            | Draft PR 创建                      | PR 事件；详见 [pr-gate.yml.md](pr-gate.yml.md) |
-| Issue 标签事件 | prepare            | `issues.labeled`                   | `github.event.issue.number`                    |
-| 运维补跑       | prepare            | `workflow_dispatch`                | `issue_number`                                 |
+| 从                 | 到                               | 机制                                          | 传递内容                                       |
+| ------------------ | -------------------------------- | --------------------------------------------- | ---------------------------------------------- |
+| prepare            | mark-codex-started               | `needs` + `proceed`                           | Issue 开始执行的标记与时间                     |
+| mark-codex-started | build / analyze-r3               | `needs` + `proceed` + `risk_level`            | 是否继续、走哪条路径                           |
+| prepare            | 下游                             | Artifact `issue-{n}-contract`                 | Contract + issue 快照                          |
+| build              | mark-codex-finished / publish    | Job result + Artifact `issue-{n}-build`       | Codex 结束状态、patch + result.json            |
+| analyze-r3         | mark-codex-finished / publish-r3 | Job result + Artifact `issue-{n}-r3-analysis` | Codex 结束状态、R3 JSON                        |
+| publish            | pr-gate                          | Draft PR 创建                                 | PR 事件；详见 [pr-gate.yml.md](pr-gate.yml.md) |
+| Issue 标签事件     | prepare                          | `issues.labeled`                              | `github.event.issue.number`                    |
+| 运维补跑           | prepare                          | `workflow_dispatch`                           | `issue_number`                                 |
 
 ---
 
@@ -181,6 +187,18 @@ node scripts/ai/validate-json.mjs \
 | **Job output** | `proceed`            | `true` / `false`                                                        |
 | **Job output** | `risk_level`         | `R0`–`R3`                                                               |
 | **Artifact**   | `issue-{n}-contract` | 目录 `.ai/runs/delivery`（含 `contract.json`、`issue.json`），保留 7 天 |
+
+---
+
+### mark-codex-started / mark-codex-finished
+
+这两个 Controller Job 不运行 Codex，只负责让 Issue 对用户显示真实进度：
+
+1. `mark-codex-started` 在 Builder 或 R3 分析启动前，把标签切到 `ai:building`，并在固定的进度评论写入 UTC 开始时间。
+2. `mark-codex-finished` 在 Codex Job 结束后更新同一条评论的 UTC 结束时间；成功切到 `ai:verifying`，失败切到 `ai:human-required`。
+3. 评论使用 `<!-- signalpatch-delivery-progress -->` 标记并原地更新，不为每个步骤追加评论。
+
+两个 Job 均使用 GitHub App Token；Codex 进程不会接收 GitHub 写凭据。
 
 ---
 
@@ -372,16 +390,16 @@ flowchart TD
   dl --> branch --> apply --> vdiff --> commit --> pr --> rec --> label
 ```
 
-| 步骤 | 命令 / 行为                                                                     |
-| ---- | ------------------------------------------------------------------------------- |
-| 1    | 分支名 `ai/issue-{ISSUE_NUMBER}-delivery`                                       |
-| 2    | `git apply --index .ai/runs/delivery/change.patch`                              |
-| 3    | `validate-diff.mjs --base HEAD --contract contract.json`                        |
-| 4    | Bot 身份 commit：`fix: deliver SignalPatch issue #{n}`                          |
-| 5    | `git push`（remote URL 嵌入 App Token）                                         |
-| 6    | `gh pr create --draft --base main --head {branch}`（**Draft PR**，非 Ready PR） |
-| 7    | `record-run.mjs`（见下）                                                        |
-| 8    | Issue 标签：`ai:ready` → `ai:building`                                          |
+| 步骤 | 命令 / 行为                                                                                          |
+| ---- | ---------------------------------------------------------------------------------------------------- |
+| 1    | 分支名 `ai/issue-{ISSUE_NUMBER}-delivery`                                                            |
+| 2    | `git apply --index .ai/runs/delivery/change.patch`                                                   |
+| 3    | `validate-diff.mjs --base HEAD --contract contract.json`                                             |
+| 4    | Bot 身份 commit：`fix: deliver SignalPatch issue #{n}`                                               |
+| 5    | `git push`（remote URL 嵌入 App Token）                                                              |
+| 6    | `gh pr create --draft --base main --head {branch}`（**Draft PR**，非 Ready PR）                      |
+| 7    | `record-run.mjs`（见下）                                                                             |
+| 8    | Issue 进度由 `issue-progress.mjs` 维护：`ai:building` → `ai:verifying`（失败为 `ai:human-required`） |
 
 Draft PR 创建后会触发 **pr-gate.yml**（详见 [Draft PR 与普通 PR 的区别](#draft-pr-与普通-pr-的区别)）。
 
@@ -457,7 +475,7 @@ stdout：`{"idempotencyKey":"..."}`，exit 0。
 | ------------ | ---------------------------------------------------------------------------- |
 | **Git**      | 分支 `ai/issue-{n}-delivery`、Draft PR                                       |
 | **Supabase** | `automation_runs` 行；Problem `repair_status` → `BUILDING`（或补建 Problem） |
-| **GitHub**   | Issue 标签 `ai:building`                                                     |
+| **GitHub**   | Issue 进度评论和标签 `ai:verifying`（失败为 `ai:human-required`）            |
 | **Artifact** | 本 Job **不上传**                                                            |
 
 ---

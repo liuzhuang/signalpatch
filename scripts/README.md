@@ -68,7 +68,7 @@ flowchart TD
 | [`classify-failure.mjs`](ai/classify-failure.mjs)       | CLI    | 将失败日志分为 `infrastructure`（Runner/网络等）或 `application`（业务/测试失败）                                  |
 | [`lib/policy.mjs`](ai/lib/policy.mjs)                   | **库** | 加载 policy YAML；glob 转正则；`requiredRisk`、`policyViolations`、`matchesAny`                                    |
 
-### 2.3 `scripts/controllers/`（8 个 CLI + 3 个库）
+### 2.3 `scripts/controllers/`（9 个 CLI + 3 个库）
 
 | 文件                                                                             | 类型   | 作用                                                                                                   |
 | -------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------ |
@@ -78,6 +78,7 @@ flowchart TD
 | [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)   | CLI    | 校验已确认 Contract；`gh` 有权限时直接发布，否则原子写入本地 `pending/` 队列（`.tmp` → rename）        |
 | [`publish-conversation-issues.mjs`](controllers/publish-conversation-issues.mjs) | CLI    | 消费本地队列：校验 Request、创建 raw Issue、精确去重并晋升 processed                                   |
 | [`record-run.mjs`](controllers/record-run.mjs)                                   | CLI    | 幂等写入 Supabase `automation_runs`；按阶段更新 Problem 的 Repair Status                               |
+| [`issue-progress.mjs`](controllers/issue-progress.mjs)                           | CLI    | 在 Issue 上维护 Delivery 的 `ai:*` 状态和单条 Codex 开始/结束时间评论                                  |
 | [`final-comment.mjs`](controllers/final-comment.mjs)                             | CLI    | 生成 Production 验收通过 Issue 评论（PR、Commit、Preview/Production URL、各 Acceptance Criterion）     |
 | [`cleanup-smoke.mjs`](controllers/cleanup-smoke.mjs)                             | CLI    | 按 tracking ID 列表文件，删除 Supabase 中标记为 synthetic 的 Feedback                                  |
 | [`lib/http.mjs`](controllers/lib/http.mjs)                                       | **库** | 带 30s 超时的 `fetch` JSON 封装；脱敏 HTTP 错误；批量校验环境变量                                      |
@@ -119,24 +120,25 @@ flowchart TD
 
 ### 3.2 按 Workflow 聚合（Workflow → Job → 脚本）
 
-| Workflow                        | Job                  | 调用的 scripts                                                                                                                         |
-| ------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| **Feedback Intake**             | `collect`            | `intake-collect.mjs`                                                                                                                   |
-| **Feedback Intake**             | `qualify`            | `bundle-schema.mjs`, `render-prompt.mjs`, `validate-json.mjs`                                                                          |
-| **Feedback Intake**             | `publish`            | `intake-publish.mjs`                                                                                                                   |
-| **Publish Conversation Issues** | `publish`            | `publish-conversation-issues.mjs` — 详见 [publish-conversation-issues.yml.md](../.github/workflows/publish-conversation-issues.yml.md) |
-| **Issue Delivery**              | `prepare`            | `prepare-issue.mjs`, `validate-json.mjs` — 详见 [issue-delivery.yml.md](../.github/workflows/issue-delivery.yml.md)                    |
-| **Issue Delivery**              | `build`              | `render-prompt.mjs`, `validate-json.mjs`, `validate-diff.mjs`                                                                          |
-| **Issue Delivery**              | `analyze-r3`         | `render-prompt.mjs`, `validate-json.mjs`                                                                                               |
-| **Issue Delivery**              | `publish`            | `validate-diff.mjs`, `record-run.mjs`                                                                                                  |
-| **PR Gate**                     | `trust`              | `prepare-issue.mjs` — 详见 [pr-gate.yml.md](../.github/workflows/pr-gate.yml.md)                                                       |
-| **PR Gate**                     | `independent-review` | `render-prompt.mjs`, `validate-json.mjs`                                                                                               |
-| **PR Gate**                     | `preview-smoke`      | `record-run.mjs`, `run-smoke.mjs`（经 `pnpm test:smoke`）                                                                              |
-| **PR Outcome**                  | `trust`              | `prepare-issue.mjs` — 详见 [pr-outcome.yml.md](../.github/workflows/pr-outcome.yml.md)                                                 |
-| **PR Outcome**                  | `collect-failure`    | `failure-fingerprint.mjs`, `classify-failure.mjs`                                                                                      |
-| **PR Outcome**                  | `repair`             | `check-repair-budget.mjs`, `render-prompt.mjs`, `validate-json.mjs`, `validate-diff.mjs`                                               |
-| **PR Outcome**                  | `publish-repair`     | `validate-diff.mjs`, `record-run.mjs`                                                                                                  |
-| **PR Outcome**                  | `finalize`           | `record-run.mjs`, `cleanup-smoke.mjs`, `final-comment.mjs`, `run-smoke.mjs`（经 `pnpm test:smoke`）                                    |
+| Workflow                        | Job                           | 调用的 scripts                                                                                                                         |
+| ------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Feedback Intake**             | `collect`                     | `intake-collect.mjs`                                                                                                                   |
+| **Feedback Intake**             | `qualify`                     | `bundle-schema.mjs`, `render-prompt.mjs`, `validate-json.mjs`                                                                          |
+| **Feedback Intake**             | `publish`                     | `intake-publish.mjs`                                                                                                                   |
+| **Publish Conversation Issues** | `publish`                     | `publish-conversation-issues.mjs` — 详见 [publish-conversation-issues.yml.md](../.github/workflows/publish-conversation-issues.yml.md) |
+| **Issue Delivery**              | `prepare`                     | `prepare-issue.mjs`, `validate-json.mjs` — 详见 [issue-delivery.yml.md](../.github/workflows/issue-delivery.yml.md)                    |
+| **Issue Delivery**              | `mark-codex-started/finished` | `issue-progress.mjs`                                                                                                                   |
+| **Issue Delivery**              | `build`                       | `render-prompt.mjs`, `validate-json.mjs`, `validate-diff.mjs`                                                                          |
+| **Issue Delivery**              | `analyze-r3`                  | `render-prompt.mjs`, `validate-json.mjs`                                                                                               |
+| **Issue Delivery**              | `publish`                     | `validate-diff.mjs`, `record-run.mjs`                                                                                                  |
+| **PR Gate**                     | `trust`                       | `prepare-issue.mjs` — 详见 [pr-gate.yml.md](../.github/workflows/pr-gate.yml.md)                                                       |
+| **PR Gate**                     | `independent-review`          | `render-prompt.mjs`, `validate-json.mjs`                                                                                               |
+| **PR Gate**                     | `preview-smoke`               | `record-run.mjs`, `run-smoke.mjs`（经 `pnpm test:smoke`）                                                                              |
+| **PR Outcome**                  | `trust`                       | `prepare-issue.mjs` — 详见 [pr-outcome.yml.md](../.github/workflows/pr-outcome.yml.md)                                                 |
+| **PR Outcome**                  | `collect-failure`             | `failure-fingerprint.mjs`, `classify-failure.mjs`                                                                                      |
+| **PR Outcome**                  | `repair`                      | `check-repair-budget.mjs`, `render-prompt.mjs`, `validate-json.mjs`, `validate-diff.mjs`                                               |
+| **PR Outcome**                  | `publish-repair`              | `validate-diff.mjs`, `record-run.mjs`                                                                                                  |
+| **PR Outcome**                  | `finalize`                    | `record-run.mjs`, `cleanup-smoke.mjs`, `final-comment.mjs`, `run-smoke.mjs`（经 `pnpm test:smoke`）                                    |
 
 ### 3.3 pnpm 命令映射
 
@@ -153,13 +155,13 @@ flowchart TD
 
 ### 4.1 凭据边界
 
-| 脚本 / 组                                                                                                  | 典型环境变量                                                |
-| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `intake-collect.mjs`, `intake-publish.mjs`, `record-run.mjs`, `cleanup-smoke.mjs`                          | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                 |
-| `intake-publish.mjs`, `prepare-issue.mjs`, `publish-conversation-issues.mjs`, `record-run.mjs`（部分步骤） | `GH_TOKEN`（GitHub App Installation Token）                 |
-| `run-smoke.mjs`（测试期间）                                                                                | 可选 Supabase（Smoke 写入 synthetic Feedback）              |
-| `enqueue-conversation-issue.mjs`                                                                           | 本机 `gh` 登录上下文；可选 `SIGNALPATCH_CONVERSATION_QUEUE` |
-| `scripts/ai/*`                                                                                             | **无** GitHub / Supabase / Vercel 写凭据                    |
+| 脚本 / 组                                                                                                                        | 典型环境变量                                                |
+| -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `intake-collect.mjs`, `intake-publish.mjs`, `record-run.mjs`, `cleanup-smoke.mjs`                                                | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                 |
+| `intake-publish.mjs`, `prepare-issue.mjs`, `publish-conversation-issues.mjs`, `record-run.mjs`, `issue-progress.mjs`（部分步骤） | `GH_TOKEN`（GitHub App Installation Token）                 |
+| `run-smoke.mjs`（测试期间）                                                                                                      | 可选 Supabase（Smoke 写入 synthetic Feedback）              |
+| `enqueue-conversation-issue.mjs`                                                                                                 | 本机 `gh` 登录上下文；可选 `SIGNALPATCH_CONVERSATION_QUEUE` |
+| `scripts/ai/*`                                                                                                                   | **无** GitHub / Supabase / Vercel 写凭据                    |
 
 Codex Job 内禁止出现上述写凭据；由 [validate-workflows.mjs](ai/validate-workflows.mjs) 在 `pnpm verify` 中强制检查。
 

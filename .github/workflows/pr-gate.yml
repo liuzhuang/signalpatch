@@ -198,6 +198,7 @@ jobs:
           name: pr-${{ github.event.pull_request.number }}-contract
           path: .ai/runs/gate
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
       # production 环境变量构建 + --skip-domain：得到与生产相同产物，但不切生产域名；URL 写入 deployment.json。
       - name: Build staged production artifact once
         env:
