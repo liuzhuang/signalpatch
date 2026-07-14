@@ -70,21 +70,21 @@ flowchart TD
 
 ### 2.3 `scripts/controllers/`（9 个 CLI + 3 个库）
 
-| 文件                                                                             | 类型   | 作用                                                                                                   |
-| -------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------ |
-| [`intake-collect.mjs`](controllers/intake-collect.mjs)                           | CLI    | 从 Supabase 原子认领一条 `PENDING` Feedback；写出脱敏 `evidence.json` 与控制器 `state.json`            |
-| [`intake-publish.mjs`](controllers/intake-publish.mjs)                           | CLI    | 创建 raw Issue；`NEEDS_EVIDENCE` 保留 raw，`SPEC_READY` 原地晋升 processed；重复时评论并关闭           |
-| [`prepare-issue.mjs`](controllers/prepare-issue.mjs)                             | CLI    | 从 processed GitHub Issue 提取 `signalpatch-contract` 标记块；写出 `contract.json` 与最小 `issue.json` |
-| [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)   | CLI    | 校验已确认 Contract；`gh` 有权限时直接发布，否则原子写入本地 `pending/` 队列（`.tmp` → rename）        |
-| [`publish-conversation-issues.mjs`](controllers/publish-conversation-issues.mjs) | CLI    | 消费本地队列：校验 Request、创建 raw Issue、精确去重并晋升 processed                                   |
-| [`record-run.mjs`](controllers/record-run.mjs)                                   | CLI    | 幂等写入 Supabase `automation_runs`；按阶段更新 Problem 的 Repair Status                               |
-| [`issue-progress.mjs`](controllers/issue-progress.mjs)                           | CLI    | 在 Issue 上维护 Delivery 的 `ai:*` 状态和单条 Codex 开始/结束时间评论                                  |
-| [`final-comment.mjs`](controllers/final-comment.mjs)                             | CLI    | 生成 Production 验收通过 Issue 评论（PR、Commit、Preview/Production URL、各 Acceptance Criterion）     |
-| [`cleanup-smoke.mjs`](controllers/cleanup-smoke.mjs)                             | CLI    | 按 tracking ID 列表文件，删除 Supabase 中标记为 synthetic 的 Feedback                                  |
-| [`lib/http.mjs`](controllers/lib/http.mjs)                                       | **库** | 带 30s 超时的 `fetch` JSON 封装；脱敏 HTTP 错误；批量校验环境变量                                      |
-| [`lib/conversation-issue.mjs`](controllers/lib/conversation-issue.mjs)           | **库** | Issue Contract Schema 校验；对话来源显式确认引用；Request/Issue Body 生成                              |
-| [`lib/issue-lifecycle.mjs`](controllers/lib/issue-lifecycle.mjs)                 | **库** | raw/processed 标签、Problem 指纹、Issue 精确去重和重复关闭                                             |
-| [`lib/run-status.mjs`](controllers/lib/run-status.mjs)                           | **库** | Automation Run 阶段（preview / production 等）到面向用户的 Repair Status 映射                          |
+| 文件                                                                             | 类型   | 作用                                                                                                          |
+| -------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| [`intake-collect.mjs`](controllers/intake-collect.mjs)                           | CLI    | 从 Supabase 原子认领一条 `PENDING` Feedback；写出脱敏 `evidence.json` 与控制器 `state.json`                   |
+| [`intake-publish.mjs`](controllers/intake-publish.mjs)                           | CLI    | 创建 raw Issue；`NEEDS_EVIDENCE` 保留 raw 并评论缺少上下文，`SPEC_READY` 原地晋升 processed；重复时评论并关闭 |
+| [`prepare-issue.mjs`](controllers/prepare-issue.mjs)                             | CLI    | 从 processed GitHub Issue 提取 `signalpatch-contract` 标记块；写出 `contract.json` 与最小 `issue.json`        |
+| [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)   | CLI    | 校验已确认 Contract；`gh` 有权限时直接发布，否则原子写入本地 `pending/` 队列（`.tmp` → rename）               |
+| [`publish-conversation-issues.mjs`](controllers/publish-conversation-issues.mjs) | CLI    | 消费本地队列：校验 Request、创建 raw Issue、精确去重并晋升 processed                                          |
+| [`record-run.mjs`](controllers/record-run.mjs)                                   | CLI    | 幂等写入 Supabase `automation_runs`；按阶段更新 Problem 的 Repair Status                                      |
+| [`issue-progress.mjs`](controllers/issue-progress.mjs)                           | CLI    | 在 Issue 上维护 Delivery 的 `ai:*` 状态和单条 Codex 开始/结束时间评论                                         |
+| [`final-comment.mjs`](controllers/final-comment.mjs)                             | CLI    | 生成 Production 验收通过 Issue 评论（PR、Commit、Preview/Production URL、各 Acceptance Criterion）            |
+| [`cleanup-smoke.mjs`](controllers/cleanup-smoke.mjs)                             | CLI    | 按 tracking ID 列表文件，删除 Supabase 中标记为 synthetic 的 Feedback                                         |
+| [`lib/http.mjs`](controllers/lib/http.mjs)                                       | **库** | 带 30s 超时的 `fetch` JSON 封装；脱敏 HTTP 错误；批量校验环境变量                                             |
+| [`lib/conversation-issue.mjs`](controllers/lib/conversation-issue.mjs)           | **库** | Issue Contract Schema 校验；对话来源显式确认引用；Request/Issue Body 生成                                     |
+| [`lib/issue-lifecycle.mjs`](controllers/lib/issue-lifecycle.mjs)                 | **库** | raw/processed 标签、Problem 指纹、Issue 精确去重和重复关闭                                                    |
+| [`lib/run-status.mjs`](controllers/lib/run-status.mjs)                           | **库** | Automation Run 阶段（preview / production 等）到面向用户的 Repair Status 映射                                 |
 
 ---
 

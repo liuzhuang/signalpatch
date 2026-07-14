@@ -306,7 +306,7 @@ flowchart TD
 
 | `result.status`      | 行为                                                                                                                                                                     |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`NEEDS_EVIDENCE`** | 创建 `content:raw` + `ai:needs-input` Issue；创建 Problem；Feedback 标为 `NEEDS_EVIDENCE`；不进入 Delivery                                                               |
+| **`NEEDS_EVIDENCE`** | 创建 `content:raw` + `ai:needs-input` Issue，评论缺少的上下文；创建 Problem；Feedback 标为 `NEEDS_EVIDENCE`；不进入 Delivery                                             |
 | **`SPEC_READY`**     | 按 policy **上调**风险 → 创建 `content:raw` Issue → 重复则评论并关闭；否则原地晋升 `content:processed` → 创建 Problem → Feedback 标为 `PROCESSED`；标签事件启动 Delivery |
 
 使用 **`content:processed` 标签事件**启动 Delivery。Issue Delivery 不监听普通 `issues.opened`，只接受有效 Contract 的 processed Issue。

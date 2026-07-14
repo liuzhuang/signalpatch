@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 
 import { requestJson, requireEnvironment } from "./lib/http.mjs";
 import {
+  ensureIssueComment,
   issueLabels,
   publishContractIssue,
   publishRawIssue,
@@ -73,6 +74,7 @@ async function updateFeedback(values) {
 ////////////////////////////////////////////////////
 if (result.status === "NEEDS_EVIDENCE") {
   const marker = `signalpatch-feedback:${state.reference}`;
+  const missingEvidenceCommentMarker = "signalpatch-needs-evidence";
   const issue = await publishRawIssue({
     repository: GITHUB_REPOSITORY,
     token: GH_TOKEN,
@@ -87,6 +89,19 @@ if (result.status === "NEEDS_EVIDENCE") {
       "_This Issue contains a redacted Intake result. The original Feedback remains in Supabase._",
     ].join("\n\n"),
     labels: issueLabels.raw("ai:needs-input"),
+  });
+  await ensureIssueComment({
+    repository: GITHUB_REPOSITORY,
+    token: GH_TOKEN,
+    issueNumber: issue.number,
+    marker: missingEvidenceCommentMarker,
+    body: [
+      "## 需要补充上下文",
+      "目前提供的信息不足，暂时无法生成可执行的开发任务。",
+      "请直接在此 Issue 下补充以下内容，补充后我们会重新评估：",
+      "",
+      ...result.missingEvidence.map((item) => `- ${item}`),
+    ].join("\n"),
   });
   const problem = await ensureProblem(
     issue.number,
