@@ -339,10 +339,13 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          gh pr ready "${{ needs.trust.outputs.pr_number }}"
-          gh pr merge "${{ needs.trust.outputs.pr_number }}" \
-            --squash \
-            --match-head-commit "${{ needs.trust.outputs.head_sha }}"
+          pr_state=$(gh pr view "${{ needs.trust.outputs.pr_number }}" --json state --jq .state)
+          if [[ "$pr_state" != "MERGED" ]]; then
+            gh pr ready "${{ needs.trust.outputs.pr_number }}"
+            gh pr merge "${{ needs.trust.outputs.pr_number }}" \
+              --squash \
+              --match-head-commit "${{ needs.trust.outputs.head_sha }}"
+          fi
       # promote 同一 deploymentUrl；Production Smoke 失败则 rollback + HUMAN_REQUIRED，不关 Issue。
       - name: Promote the exact accepted deployment
         env:
