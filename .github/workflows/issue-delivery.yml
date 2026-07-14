@@ -69,9 +69,28 @@ jobs:
           path: .ai/runs/delivery
           retention-days: 7
 
+  # Controller 先把 Issue 标记为执行中；只有这一步完成后才启动 Codex，避免用户看到过时的 ai:ready。
+  mark-codex-started:
+    needs: prepare
+    if: needs.prepare.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SIGNALPATCH_APP_ID }}
+          private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      - name: Mark Codex execution started
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE_NUMBER: ${{ needs.prepare.outputs.issue_number }}
+        run: node scripts/controllers/issue-progress.mjs start "$ISSUE_NUMBER"
+
   # R0-R2 在无外部写凭据的自托管 Runner 修改工作树；R3 永远不会进入此 Job。
   build:
-    needs: prepare
+    needs: [prepare, mark-codex-started]
     if: needs.prepare.outputs.proceed == 'true' && needs.prepare.outputs.risk_level != 'R3'
     runs-on: [self-hosted, macOS, ARM64, signalpatch]
     steps:
@@ -131,7 +150,7 @@ jobs:
 
   # R3 只生成结构化分析，不产生 Patch；复用 Reviewer 的只读阶段规则。
   analyze-r3:
-    needs: prepare
+    needs: [prepare, mark-codex-started]
     if: needs.prepare.outputs.proceed == 'true' && needs.prepare.outputs.risk_level == 'R3'
     runs-on: [self-hosted, macOS, ARM64, signalpatch]
     steps:
@@ -174,9 +193,40 @@ jobs:
           path: .ai/runs/delivery/r3-analysis.json
           retention-days: 7
 
+  # Codex 结束后立即记录结束时间；成功进入验证，失败转人工，均由 Controller 写 Issue。
+  mark-codex-finished:
+    needs: [prepare, mark-codex-started, build, analyze-r3]
+    if: >-
+      always() &&
+      needs.prepare.outputs.proceed == 'true' &&
+      needs.mark-codex-started.result == 'success' &&
+      (needs.build.result != 'skipped' || needs.analyze-r3.result != 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SIGNALPATCH_APP_ID }}
+          private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
+      - name: Mark Codex execution finished
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE_NUMBER: ${{ needs.prepare.outputs.issue_number }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          ANALYZE_R3_RESULT: ${{ needs.analyze-r3.result }}
+        run: |
+          result="$BUILD_RESULT"
+          if [[ "$result" == "skipped" ]]; then
+            result="$ANALYZE_R3_RESULT"
+          fi
+          node scripts/controllers/issue-progress.mjs end "$ISSUE_NUMBER" "$result"
+
   # 分析完成后才在隔离 Job 获取 App Token，把结论写回 Issue 并转为人工处理。
   publish-r3:
-    needs: [prepare, analyze-r3]
+    needs: [prepare, analyze-r3, mark-codex-finished]
+    if: always() && needs.prepare.result == 'success' && needs.analyze-r3.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -203,7 +253,8 @@ jobs:
 
   # Controller 在干净 main 上应用 build Job 已校验的 Patch，push 后开 Draft PR（非 Ready，合并由 pr-outcome 负责）。
   publish:
-    needs: [prepare, build]
+    needs: [prepare, build, mark-codex-finished]
+    if: always() && needs.prepare.result == 'success' && needs.build.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -270,4 +321,3 @@ jobs:
             --head-sha "$(git rev-parse HEAD)" \
             --pr "$pr_number" \
             --contract .ai/runs/delivery/contract.json
-          gh issue edit "$ISSUE_NUMBER" --remove-label "ai:ready" --add-label "ai:building"
