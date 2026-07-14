@@ -44,7 +44,8 @@ pnpm test:smoke -- --base-url="https://<production-url>"
 - 扫描器只领取一个待处理 Feedback。
 - Codex 只读取脱敏 evidence，没有 Supabase Service Role Key。
 - 输出通过 JSON Schema 校验。
-- Controller 创建带统一 Issue Contract 的 GitHub Issue，并显式 dispatch `Issue Delivery`。
+- Controller 先创建 `content:raw` Issue；达到 `SPEC_READY` 后在同一个 Issue 上改为 `content:processed`，并显式 dispatch `Issue Delivery`。
+- 如果同一 Problem 已有 processed Issue，当前 raw Issue 评论 canonical Issue、添加 `duplicate` 并关闭，不再启动 Delivery。
 
 ### Issue Delivery
 
@@ -57,7 +58,7 @@ pnpm test:smoke -- --base-url="https://<production-url>"
 
 ### PR Gate
 
-预期四个检查通过：
+预期四个自动化验收 Job 通过：
 
 - `verify`
 - `build`
@@ -65,6 +66,8 @@ pnpm test:smoke -- --base-url="https://<production-url>"
 - `preview-smoke`
 
 `preview-smoke` 必须验证原始 Tracking ID、带首尾空格的 Tracking ID 和不存在的 ID。失败时，`PR Outcome` 应归一化日志并启动有界 Repair；同一 Failure Fingerprint 重复、越界修改或超过三次时转为 `ai:human-required`。
+
+这四项结果不属于 Required Checks。当前 `main` 没有 Ruleset 或 Branch Protection；PR Gate 只负责决定自动化流程是否进入 PR Outcome。
 
 ### PR Outcome
 

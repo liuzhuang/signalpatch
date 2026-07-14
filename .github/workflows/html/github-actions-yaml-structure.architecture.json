@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "GitHub Actions YAML 层级结构",
-    "subtitle": "workflow.yml 文件内 on / permissions / jobs / steps / outputs 的嵌套关系",
+    "subtitle": "当前五条 workflow.yml 内 on / permissions / jobs / steps / outputs 的嵌套关系",
     "output": "github-actions-yaml-structure.html"
   },
   "components": [
@@ -117,7 +117,12 @@
     { "from": "file", "to": "jobs", "variant": "emphasis" },
     { "from": "jobs", "to": "job_meta", "variant": "default" },
     { "from": "jobs", "to": "job_permissions", "variant": "security" },
-    { "from": "jobs", "to": "job_outputs", "label": "定义", "variant": "dashed" },
+    {
+      "from": "jobs",
+      "to": "job_outputs",
+      "label": "定义",
+      "variant": "dashed"
+    },
     { "from": "jobs", "to": "steps", "variant": "emphasis" },
     { "from": "steps", "to": "step", "variant": "default" },
     {
@@ -142,12 +147,12 @@
   "cards": [
     {
       "dot": "cyan",
-      "title": "feedback-intake 示例",
+      "title": "当前入口示例",
       "items": [
-        "on: schedule + workflow_dispatch",
-        "permissions: contents: read（Workflow 级）",
-        "jobs: collect → qualify → publish",
-        "collect.outputs.has_feedback → qualify 的 if"
+        "Feedback Intake：schedule + workflow_dispatch",
+        "Conversation Publisher：schedule + workflow_dispatch",
+        "Issue Delivery：仅 workflow_dispatch(issue_number)",
+        "PR Gate：pull_request；PR Outcome：workflow_run"
       ]
     },
     {
@@ -157,6 +162,15 @@
         "步骤内：steps.scan.outputs.has_feedback",
         "Job 间：needs.collect.outputs.has_feedback",
         "Job 输出定义：${{ steps.scan.outputs.has_feedback }}"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "仓库规则边界",
+      "items": [
+        "YAML 定义自动化如何运行，不等同于 main 分支保护",
+        "当前仓库没有 Ruleset 或 Branch Protection",
+        "PR Gate Check 只用于自动化验收，不是 Required Checks"
       ]
     }
   ]

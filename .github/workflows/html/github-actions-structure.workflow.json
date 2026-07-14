@@ -2,158 +2,270 @@
   "schema_version": 1,
   "diagram_type": "workflow",
   "meta": {
-    "title": "GitHub Actions Workflow 结构",
-    "subtitle": "on → permissions → jobs → steps → outputs（中文释义）",
+    "title": "SignalPatch GitHub Actions 工作流",
+    "subtitle": "Supabase / Codex → 同一 Issue 生命周期 → Delivery → PR 自动化验收 → Production",
     "output": "github-actions-structure.html",
-    "viewBox": [720, 820]
+    "animation": "trace"
   },
   "lanes": [
-    { "id": "flow", "label": "执行与声明顺序" },
-    { "id": "data", "label": "输出与跨 Job 传参" }
+    { "id": "conversation", "label": "Codex 本地队列" },
+    { "id": "feedback", "label": "Supabase Feedback" },
+    { "id": "issue", "label": "统一 GitHub Issue" },
+    { "id": "delivery", "label": "Issue Delivery" },
+    { "id": "gate", "label": "PR Gate 自动化验收" },
+    { "id": "outcome", "label": "PR Outcome" },
+    { "id": "production", "label": "Production" },
+    { "id": "exceptions", "label": "重复或证据不足", "variant": "exception" }
   ],
   "phases": [
-    { "id": "trigger", "label": "① on", "fromCol": 0, "toCol": 2 },
-    { "id": "authz", "label": "② 权限", "fromCol": 4, "toCol": 4 },
-    { "id": "exec", "label": "③ jobs / steps", "fromCol": 5, "toCol": 5 }
+    { "id": "intake", "label": "① 两个入口", "fromCol": 0, "toCol": 1 },
+    {
+      "id": "lifecycle",
+      "label": "② 同一 Issue",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "delivery_release",
+      "label": "③ 交付与发布",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
   ],
-  "mainPath": ["event", "on", "permissions", "job"],
+  "mainPath": [
+    "feedback_source",
+    "feedback_intake",
+    "raw",
+    "processed",
+    "issue_delivery",
+    "draft_pr"
+  ],
   "nodes": [
     {
-      "id": "event",
-      "lane": "flow",
+      "id": "feedback_source",
+      "lane": "feedback",
       "col": 0,
-      "type": "external",
-      "label": "外部事件",
-      "sublabel": "cron / dispatch…",
-      "width": 80
+      "type": "database",
+      "label": "Feedback",
+      "sublabel": "Supabase 待处理记录",
+      "width": 96
     },
     {
-      "id": "on",
-      "lane": "flow",
+      "id": "feedback_intake",
+      "lane": "feedback",
+      "col": 1,
+      "type": "backend",
+      "label": "Feedback Intake",
+      "sublabel": "collect → qualify → publish",
+      "width": 112
+    },
+    {
+      "id": "conversation_queue",
+      "lane": "conversation",
+      "col": 0,
+      "type": "database",
+      "label": "已确认 Contract",
+      "sublabel": "本地受控队列",
+      "width": 96
+    },
+    {
+      "id": "conversation_publish",
+      "lane": "conversation",
       "col": 2,
+      "type": "backend",
+      "label": "发布 Issue",
+      "sublabel": "校验并发布 Issue",
+      "width": 96
+    },
+    {
+      "id": "raw",
+      "lane": "issue",
+      "col": 2,
+      "type": "messagebus",
+      "label": "content:raw",
+      "sublabel": "保留原始入口内容",
+      "width": 92
+    },
+    {
+      "id": "processed",
+      "lane": "issue",
+      "col": 3,
+      "type": "messagebus",
+      "label": "processed",
+      "sublabel": "content:processed · 原地晋升",
+      "tag": "SPEC_READY 且未重复",
+      "width": 108
+    },
+    {
+      "id": "issue_delivery",
+      "lane": "delivery",
+      "col": 4,
+      "type": "backend",
+      "label": "Issue Delivery",
+      "sublabel": "显式 workflow_dispatch",
+      "width": 96
+    },
+    {
+      "id": "draft_pr",
+      "lane": "delivery",
+      "col": 5,
       "type": "frontend",
-      "label": "on",
-      "sublabel": "触发器",
-      "width": 80
+      "label": "Draft PR",
+      "sublabel": "AI 分支与变更",
+      "width": 88
     },
     {
-      "id": "permissions",
-      "lane": "flow",
-      "col": 4,
+      "id": "pr_gate",
+      "lane": "gate",
+      "col": 5,
       "type": "security",
-      "label": "permissions",
-      "sublabel": "令牌权限",
-      "width": 80
+      "label": "PR Gate",
+      "sublabel": "verify / build / review / smoke",
+      "tag": "不是 Required Checks",
+      "width": 108
     },
     {
-      "id": "job",
-      "lane": "flow",
+      "id": "pr_outcome",
+      "lane": "outcome",
       "col": 5,
       "type": "backend",
-      "label": "Job + steps",
-      "sublabel": "jobs 内：逐步执行",
-      "width": 80
+      "label": "PR Outcome",
+      "sublabel": "Repair 或 finalize",
+      "width": 106
     },
     {
-      "id": "step_out",
-      "lane": "data",
+      "id": "production_release",
+      "lane": "production",
       "col": 5,
-      "type": "database",
-      "label": "步骤输出",
-      "sublabel": "steps.*.outputs",
-      "width": 80
+      "type": "cloud",
+      "label": "Production",
+      "sublabel": "promote + smoke + 关 Issue",
+      "width": 108
     },
     {
-      "id": "job_out",
-      "lane": "data",
-      "col": 4,
-      "type": "database",
-      "label": "Job 输出",
-      "sublabel": "jobs.*.outputs",
-      "width": 80
+      "id": "needs_evidence",
+      "lane": "exceptions",
+      "col": 3,
+      "type": "security",
+      "label": "ai:needs-input",
+      "sublabel": "Issue 保持 raw",
+      "width": 104
     },
     {
-      "id": "next_job",
-      "lane": "data",
-      "col": 2,
-      "type": "backend",
-      "label": "下一 Job",
-      "sublabel": "needs + if",
-      "width": 80
+      "id": "duplicate",
+      "lane": "exceptions",
+      "col": 5,
+      "type": "security",
+      "label": "duplicate",
+      "sublabel": "评论 canonical Issue 并关闭",
+      "width": 108
     }
   ],
   "edges": [
-    { "from": "event", "to": "on", "variant": "emphasis" },
-    { "from": "on", "to": "permissions", "variant": "default" },
-    { "from": "permissions", "to": "job", "variant": "emphasis" },
     {
-      "from": "job",
-      "to": "step_out",
-      "variant": "dashed",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "route": "drop"
+      "from": "feedback_source",
+      "to": "feedback_intake",
+      "variant": "default"
     },
     {
-      "from": "step_out",
-      "to": "job_out",
-      "variant": "dashed",
-      "fromSide": "left",
-      "toSide": "right"
+      "from": "conversation_queue",
+      "to": "conversation_publish",
+      "variant": "default"
     },
     {
-      "from": "job_out",
-      "to": "next_job",
+      "from": "feedback_intake",
+      "to": "raw",
       "variant": "emphasis",
       "fromSide": "bottom",
       "toSide": "top",
       "route": "drop"
+    },
+    {
+      "from": "conversation_publish",
+      "to": "raw",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    { "from": "raw", "to": "processed", "variant": "emphasis" },
+    { "from": "processed", "to": "issue_delivery", "variant": "emphasis" },
+    { "from": "issue_delivery", "to": "draft_pr", "variant": "default" },
+    {
+      "from": "draft_pr",
+      "to": "pr_gate",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "from": "pr_gate",
+      "to": "pr_outcome",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "from": "pr_outcome",
+      "to": "production_release",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "from": "raw",
+      "to": "needs_evidence",
+      "label": "证据不足",
+      "variant": "security",
+      "role": "error",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "labelSegment": 1
+    },
+    {
+      "from": "raw",
+      "to": "duplicate",
+      "label": "Problem 指纹重复",
+      "variant": "security",
+      "role": "branch",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "bottom-channel",
+      "labelSegment": 1
     }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "on 触发器",
+      "title": "统一 Issue 入口",
       "items": [
-        "声明 Workflow 在什么事件下运行",
-        "例：schedule cron、workflow_dispatch 手动",
-        "例：pull_request、issues.opened、workflow_run"
+        "Supabase Feedback 与 Codex 对话都创建 GitHub Issue",
+        "创建时标记 content:raw，资格通过后原地改为 content:processed",
+        "Issue Delivery 只接受 processed Issue 和显式 dispatch"
       ]
     },
     {
       "dot": "rose",
-      "title": "permissions 权限",
+      "title": "重复处理",
       "items": [
-        "限制 GITHUB_TOKEN 可读/可写范围",
-        "Workflow 级默认；单个 Job 可收紧或放宽",
-        "例：顶层 contents: read；publish Job 另开 issues: write"
+        "两个入口共用 Problem 指纹",
+        "重复 Issue 评论 canonical Issue",
+        "当前 Issue 保留 raw、添加 duplicate 并关闭"
       ]
     },
     {
       "dot": "emerald",
-      "title": "jobs 与 steps",
+      "title": "放宽后的 main",
       "items": [
-        "jobs：具名 Job；needs 决定等待哪些上游 Job",
-        "steps：同一 Job 内顺序执行；uses 或 run",
-        "if: needs.<job>.outputs.<name> 控制是否运行"
-      ]
-    },
-    {
-      "dot": "amber",
-      "title": "outputs 产出",
-      "items": [
-        "步骤：echo \"k=v\" >> $GITHUB_OUTPUT",
-        "Job：outputs 块映射 steps.<id>.outputs",
-        "跨 Job 文件：upload-artifact / download-artifact"
-      ]
-    },
-    {
-      "dot": "cyan",
-      "title": "feedback-intake 对照",
-      "items": [
-        "collect → qualify → publish 三个 Job",
-        "collect.outputs.has_feedback 供 qualify 的 if",
-        "scan 步骤 id 供 outputs 引用"
+        "仓库没有 Ruleset 或 Branch Protection",
+        "不要求 Pull Request 或 Required status checks",
+        "PR Gate 仍决定自动化是否进入 PR Outcome"
       ]
     }
   ]

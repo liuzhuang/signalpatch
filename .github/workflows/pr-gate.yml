@@ -1,6 +1,6 @@
 name: PR Gate
 
-# 【做什么】PR 每次更新跑 verify/build/AI 审查/预览部署+Smoke；结果供自动化验收，不作为 Ruleset 强制条件
+# 【做什么】PR 每次更新跑 verify/build/AI 审查/预览部署+Smoke；结果只驱动自动化自身，不是仓库合并门禁
 # 【何时跑】PR 打开、重开、或有新 push 时（无手动触发）
 # 【详见】.github/workflows/README.md
 on:

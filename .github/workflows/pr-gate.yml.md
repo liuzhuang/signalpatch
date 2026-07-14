@@ -1,6 +1,6 @@
 # pr-gate.yml 说明
 
-[pr-gate.yml](pr-gate.yml) 在 PR 每次更新时跑 **verify**、**build**、**独立审查**、**预览部署 + Smoke Test**。4 个检查供自动化验收使用，不由 `main` Ruleset 强制；整轮结束后触发 [pr-outcome.yml](pr-outcome.yml)（Workflow 名为 **`PR Gate`**）。
+[pr-gate.yml](pr-gate.yml) 在 PR 每次更新时跑 **verify**、**build**、**独立审查**、**预览部署 + Smoke Test**。4 个检查供自动化验收使用，不是 Required Checks；整轮结束后触发 [pr-outcome.yml](pr-outcome.yml)（Workflow 名为 **`PR Gate`**）。
 
 上游通常为 [issue-delivery.yml.md](issue-delivery.yml.md) 创建的 **Draft PR**。
 
@@ -41,12 +41,12 @@ flowchart TD
 
 ### 触发与并发
 
-| 项目 | 说明 |
-|------|------|
-| **触发** | `pull_request`：`opened`、`synchronize`、`reopened` |
+| 项目       | 说明                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| **触发**   | `pull_request`：`opened`、`synchronize`、`reopened`                                         |
 | **不触发** | 无 `workflow_dispatch`；**不**监听 `ready_for_review`（Draft 转 Ready 不保证再跑一轮 Gate） |
-| **并发** | `group: pr-gate-${{ pull_request.number }}`，`cancel-in-progress: true` |
-| **含义** | 同一 PR 有新 push 时**取消**旧 Gate Run，只认最新 Head SHA 的结果 |
+| **并发**   | `group: pr-gate-${{ pull_request.number }}`，`cancel-in-progress: true`                     |
+| **含义**   | 同一 PR 有新 push 时**取消**旧 Gate Run，只认最新 Head SHA 的结果                           |
 
 Draft PR 创建（`opened`）会触发 Gate；详见 [issue-delivery.yml.md § Draft PR](issue-delivery.yml.md#draft-pr-与普通-pr-的区别)。
 
@@ -54,42 +54,42 @@ Draft PR 创建（`opened`）会触发 Gate；详见 [issue-delivery.yml.md § D
 
 以下 **4 个**检查会显示在 PR 上；自动化 PR 只有在本轮全部成功后才进入 PR Outcome 的合并和发布步骤：
 
-| 检查名（Job `name:`） | 对应 Job id | 做什么 |
-|----------------------|-------------|--------|
-| **verify** | `verify` | `pnpm verify` |
-| **build** | `build` | `pnpm build` |
+| 检查名（Job `name:`）  | 对应 Job id                                         | 做什么                                   |
+| ---------------------- | --------------------------------------------------- | ---------------------------------------- |
+| **verify**             | `verify`                                            | `pnpm verify`                            |
+| **build**              | `build`                                             | `pnpm build`                             |
 | **independent-review** | `independent-review` 或 `manual-independent-review` | Codex 审查 **或** `r2-approval` 人工环境 |
-| **preview-smoke** | `preview-smoke` | Vercel staged 部署 + Smoke Test |
+| **preview-smoke**      | `preview-smoke`                                     | Vercel staged 部署 + Smoke Test          |
 
 **`trust` 不属于这 4 个检查**：它是安全前置与证据准备；失败时后续 Job 不运行。
 
 ### Job 总览
 
-| Job | Runner | 用途（一句话） | 何时跳过 |
-|-----|--------|----------------|----------|
-| **trust** | `ubuntu-latest` | 校验 PR 来源、定 `mode` / `risk_level`、拉 Contract（automation） | 从不跳过 |
-| **verify** | `ubuntu-latest` | 格式、Lint、类型、单测、SQL/Workflow 校验 | `trust` 失败 |
-| **build** | `ubuntu-latest` | 独立生产构建 | `trust` 失败 |
-| **independent-review** | 自托管 macOS | 独立 Codex 只读审查 diff | `mode != automation` |
-| **manual-independent-review** | `ubuntu-latest` + `r2-approval` | 人工批准（`codex/*` PR） | `mode != manual` |
-| **preview-smoke** | `ubuntu-latest` | staged 部署 + Smoke + 记 Preview Run | 见 [preview-smoke 条件](#preview-smoke-的-if-条件) |
+| Job                           | Runner                          | 用途（一句话）                                                    | 何时跳过                                           |
+| ----------------------------- | ------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------- |
+| **trust**                     | `ubuntu-latest`                 | 校验 PR 来源、定 `mode` / `risk_level`、拉 Contract（automation） | 从不跳过                                           |
+| **verify**                    | `ubuntu-latest`                 | 格式、Lint、类型、单测、SQL/Workflow 校验                         | `trust` 失败                                       |
+| **build**                     | `ubuntu-latest`                 | 独立生产构建                                                      | `trust` 失败                                       |
+| **independent-review**        | 自托管 macOS                    | 独立 Codex 只读审查 diff                                          | `mode != automation`                               |
+| **manual-independent-review** | `ubuntu-latest` + `r2-approval` | 人工批准（`codex/*` PR）                                          | `mode != manual`                                   |
+| **preview-smoke**             | `ubuntu-latest`                 | staged 部署 + Smoke + 记 Preview Run                              | 见 [preview-smoke 条件](#preview-smoke-的-if-条件) |
 
 ### Job 之间如何传参
 
-| 从 | 到 | 机制 | 传递内容 |
-|----|-----|------|----------|
-| trust | verify / build / review | `needs.trust.outputs.head_sha` | checkout 固定 SHA |
-| trust | review / preview-smoke | `mode`、`issue_number`、`risk_level` | 自动化 vs 人工路径 |
-| trust | independent-review / preview-smoke | Artifact `pr-{n}-contract` | Contract（仅 automation） |
-| independent-review | （留存） | Artifact `pr-{n}-review` | Reviewer JSON |
-| preview-smoke | pr-outcome | Artifact `pr-{n}-deployment` | `deployment.json`、`smoke-tracking-ids.txt` |
-| issue-delivery publish | pr-gate | `pull_request` 事件 | Draft PR |
+| 从                     | 到                                 | 机制                                 | 传递内容                                    |
+| ---------------------- | ---------------------------------- | ------------------------------------ | ------------------------------------------- |
+| trust                  | verify / build / review            | `needs.trust.outputs.head_sha`       | checkout 固定 SHA                           |
+| trust                  | review / preview-smoke             | `mode`、`issue_number`、`risk_level` | 自动化 vs 人工路径                          |
+| trust                  | independent-review / preview-smoke | Artifact `pr-{n}-contract`           | Contract（仅 automation）                   |
+| independent-review     | （留存）                           | Artifact `pr-{n}-review`             | Reviewer JSON                               |
+| preview-smoke          | pr-outcome                         | Artifact `pr-{n}-deployment`         | `deployment.json`、`smoke-tracking-ids.txt` |
+| issue-delivery publish | pr-gate                            | `pull_request` 事件                  | Draft PR                                    |
 
-| Artifact | 产出 Job | 保留 | 消费者 |
-|----------|----------|------|--------|
-| `pr-{n}-contract` | trust（automation） | 7 天 | independent-review、preview-smoke |
-| `pr-{n}-review` | independent-review | 7 天 | 审计留存 |
-| `pr-{n}-deployment` | preview-smoke | 7 天 | pr-outcome **finalize**（promote 同一 Deployment） |
+| Artifact            | 产出 Job            | 保留 | 消费者                                             |
+| ------------------- | ------------------- | ---- | -------------------------------------------------- |
+| `pr-{n}-contract`   | trust（automation） | 7 天 | independent-review、preview-smoke                  |
+| `pr-{n}-review`     | independent-review  | 7 天 | 审计留存                                           |
+| `pr-{n}-deployment` | preview-smoke       | 7 天 | pr-outcome **finalize**（promote 同一 Deployment） |
 
 ---
 
@@ -110,12 +110,12 @@ Draft PR 创建（`opened`）会触发 Gate；详见 [issue-delivery.yml.md § D
 
 **环境变量**
 
-| 变量 | 来源 |
-|------|------|
-| `APP_BOT` | `vars.SIGNALPATCH_APP_BOT` |
+| 变量                                        | 来源                          |
+| ------------------------------------------- | ----------------------------- |
+| `APP_BOT`                                   | `vars.SIGNALPATCH_APP_BOT`    |
 | `HEAD_REF` / `HEAD_SHA` / `HEAD_REPOSITORY` | `github.event.pull_request.*` |
-| `PR_AUTHOR` | PR 作者 login |
-| `GH_TOKEN` | `github.token`（读 Issue） |
+| `PR_AUTHOR`                                 | PR 作者 login                 |
+| `GH_TOKEN`                                  | `github.token`（读 Issue）    |
 
 ```mermaid
 flowchart TD
@@ -167,12 +167,12 @@ PR source is not trusted for this gate → exit 1
 
 **步骤 3：写出 Job outputs**
 
-| Output | 值 |
-|--------|-----|
+| Output         | 值                                       |
+| -------------- | ---------------------------------------- |
 | `issue_number` | automation 时从分支解析；manual 时**无** |
-| `head_sha` | `github.event.pull_request.head.sha` |
-| `mode` | `automation` / `manual` |
-| `risk_level` | Contract 的 `riskLevel` 或 `R2` |
+| `head_sha`     | `github.event.pull_request.head.sha`     |
+| `mode`         | `automation` / `manual`                  |
+| `risk_level`   | Contract 的 `riskLevel` 或 `R2`          |
 
 automation 时上传 Artifact `pr-{n}-contract`（路径 `.ai/runs/gate`）。
 
@@ -227,7 +227,7 @@ automation 时上传 Artifact `pr-{n}-contract`（路径 `.ai/runs/gate`）。
 
 #### 用途
 
-**Required Check 之三**（automation）：与 Builder **不同会话**的 Codex **只读**审查 PR diff + Issue Contract；`decision` 必须为 **`APPROVE`**。
+**自动化验收之三**（automation）：与 Builder **不同会话**的 Codex **只读**审查 PR diff + Issue Contract；`decision` 必须为 **`APPROVE`**。
 
 #### 执行流程
 
@@ -258,10 +258,10 @@ node scripts/ai/render-prompt.mjs \
 
 **2. Codex Reviewer**
 
-| 项目 | 值 |
-|------|-----|
-| **沙箱** | `read-only` |
-| **环境** | `env -i` + `HOME` / `PATH` |
+| 项目     | 值                                                                                                          |
+| -------- | ----------------------------------------------------------------------------------------------------------- |
+| **沙箱** | `read-only`                                                                                                 |
+| **环境** | `env -i` + `HOME` / `PATH`                                                                                  |
 | **输出** | `.ai/runs/gate/review.json`（[delivery-output.schema.json](../../.ai/schemas/delivery-output.schema.json)） |
 
 **3. Require approval**
@@ -291,7 +291,7 @@ node -e 'const r=require("./.ai/runs/gate/review.json"); if(r.decision!=="APPROV
 #### 执行流程
 
 ```yaml
-name: independent-review   # 与 automation Job 同名，PR 上只显示一个检查
+name: independent-review # 与 automation Job 同名，PR 上只显示一个检查
 environment: r2-approval
 steps:
   - run: true
@@ -326,9 +326,9 @@ deployment_url=$(pnpm exec vercel deploy --prebuilt --prod --skip-domain --yes -
 
 写入 `.ai/runs/gate/deployment.json`：`{ deploymentUrl, headSha }`。
 
-| 标志 | 含义 |
-|------|------|
-| `--prod` | 使用 production 构建配置 |
+| 标志            | 含义                                         |
+| --------------- | -------------------------------------------- |
+| `--prod`        | 使用 production 构建配置                     |
 | `--skip-domain` | **暂不**绑定生产域名 → **staged** deployment |
 
 **2. Smoke test staged deployment**
@@ -356,10 +356,10 @@ node scripts/controllers/record-run.mjs \
 
 与 issue-delivery `build` 阶段对比：
 
-| 阶段 | `record-run` `--stage` | Repair Status |
-|------|------------------------|---------------|
-| Delivery publish | `build` | `BUILDING` |
-| PR Gate preview-smoke | `preview` | `VERIFYING` |
+| 阶段                  | `record-run` `--stage` | Repair Status |
+| --------------------- | ---------------------- | ------------- |
+| Delivery publish      | `build`                | `BUILDING`    |
+| PR Gate preview-smoke | `preview`              | `VERIFYING`   |
 
 **4. 上传 Artifact**
 
@@ -387,10 +387,10 @@ Outcome **finalize** 下载后 **promote** 此 Deployment，**不**重新 `verce
 
 `mode` 是 **trust Job 的 Job 级输出**，决定 PR 走 **自动化** 还是 **手工** 审查路径（类比 Intake 的 [`has_feedback`](feedback-intake.yml.md#has_feedback-逻辑)、Delivery 的 [`proceed`](issue-delivery.yml.md#proceed-逻辑)）。
 
-| `mode` | 如何产生 | `risk_level` | 审查 Job |
-|--------|----------|--------------|----------|
-| **`automation`** | 分支 `ai/issue-{n}-*` 且作者为 App Bot | Contract 的 `riskLevel` | `independent-review`（Codex） |
-| **`manual`** | 分支 `codex/*` 且作者为仓库 owner | 固定 **R2** | `manual-independent-review`（Environment） |
+| `mode`           | 如何产生                               | `risk_level`            | 审查 Job                                   |
+| ---------------- | -------------------------------------- | ----------------------- | ------------------------------------------ |
+| **`automation`** | 分支 `ai/issue-{n}-*` 且作者为 App Bot | Contract 的 `riskLevel` | `independent-review`（Codex）              |
+| **`manual`**     | 分支 `codex/*` 且作者为仓库 owner      | 固定 **R2**             | `manual-independent-review`（Environment） |
 
 ```mermaid
 flowchart TD
@@ -405,21 +405,21 @@ flowchart TD
   m -->|manual| man --> smoke
 ```
 
-| Job | 条件 |
-|-----|------|
-| **independent-review** | `needs.trust.outputs.mode == 'automation'` |
-| **manual-independent-review** | `needs.trust.outputs.mode == 'manual'` |
-| **preview-smoke** | 见下节（被跳过的审查 Job 不阻塞） |
+| Job                           | 条件                                       |
+| ----------------------------- | ------------------------------------------ |
+| **independent-review**        | `needs.trust.outputs.mode == 'automation'` |
+| **manual-independent-review** | `needs.trust.outputs.mode == 'manual'`     |
+| **preview-smoke**             | 见下节（被跳过的审查 Job 不阻塞）          |
 
 Fork PR、陌生分支、非 Bot 的 `ai/issue-*` 等：`trust` **失败**，整轮 Gate 失败。
 
 ### trust 为什么不是 Required Check
 
-| | **trust** | **verify / build / independent-review / preview-smoke** |
-|--|-----------|--------------------------------------------------------|
-| **PR 上是否显示** | **否** | **是**（4 个检查） |
-| **作用** | 来源安全、固定 SHA、拉 Contract、定 mode | 可合并门闩 |
-| **失败后果** | 后续 Job 不跑或跳过 | 自动化不会进入合并和发布步骤 |
+|                   | **trust**                                | **verify / build / independent-review / preview-smoke** |
+| ----------------- | ---------------------------------------- | ------------------------------------------------------- |
+| **PR 上是否显示** | **否**                                   | **是**（4 个检查）                                      |
+| **作用**          | 来源安全、固定 SHA、拉 Contract、定 mode | 可合并门闩                                              |
+| **失败后果**      | 后续 Job 不跑或跳过                      | 自动化不会进入合并和发布步骤                            |
 
 设计意图：`trust` 是控制器内部安全层，不需要与 `pnpm verify` 并列成第五个检查名。
 
@@ -427,10 +427,10 @@ Fork PR、陌生分支、非 Bot 的 `ai/issue-*` 等：`trust` **失败**，整
 
 GitHub PR Checks 显示的是 Job 的 **`name:`**，不是 job id：
 
-| job id | `name:` | 何时跑 |
-|--------|---------|--------|
-| `independent-review` | `independent-review` | `mode == automation` |
-| `manual-independent-review` | **`independent-review`** | `mode == manual` |
+| job id                      | `name:`                  | 何时跑               |
+| --------------------------- | ------------------------ | -------------------- |
+| `independent-review`        | `independent-review`     | `mode == automation` |
+| `manual-independent-review` | **`independent-review`** | `mode == manual`     |
 
 同一 PR **只会跑其中一个**（另一个 Skipped），PR 上始终只看到 **一个** `independent-review` 检查。
 
@@ -443,12 +443,12 @@ if: >-
 
 拆解：
 
-| 子条件 | 含义 |
-|--------|------|
-| `always()` | 即使某 `needs` Job 被跳过，仍评估表达式（否则跳过审查会导致 smoke 不评估） |
-| `trust/verify/build == success` | 前三道基础门通过 |
-| `automation && independent-review.success` | 自动化路径：Codex 审查通过 |
-| `manual && manual-independent-review.success` | 手工路径：Environment 批准通过 |
+| 子条件                                        | 含义                                                                       |
+| --------------------------------------------- | -------------------------------------------------------------------------- |
+| `always()`                                    | 即使某 `needs` Job 被跳过，仍评估表达式（否则跳过审查会导致 smoke 不评估） |
+| `trust/verify/build == success`               | 前三道基础门通过                                                           |
+| `automation && independent-review.success`    | 自动化路径：Codex 审查通过                                                 |
+| `manual && manual-independent-review.success` | 手工路径：Environment 批准通过                                             |
 
 被跳过的审查 Job 结果为 `skipped`，**不**当作失败。
 
@@ -476,17 +476,17 @@ preview-smoke 构建并部署（skip-domain）
 
 ### 与 pr-outcome.yml 的衔接
 
-| PR Gate 结束状态 | pr-outcome 行为（概要） |
-|------------------|-------------------------|
-| **成功** | `finalize`：合并、promote `deployment.json`、Production Smoke、关 Issue |
-| **失败** | `repair` 或基础设施重试（见 [pr-outcome.yml.md](pr-outcome.yml.md)） |
+| PR Gate 结束状态 | pr-outcome 行为（概要）                                                 |
+| ---------------- | ----------------------------------------------------------------------- |
+| **成功**         | `finalize`：合并、promote `deployment.json`、Production Smoke、关 Issue |
+| **失败**         | `repair` 或基础设施重试（见 [pr-outcome.yml.md](pr-outcome.yml.md)）    |
 
 触发方式：
 
 ```yaml
 on:
   workflow_run:
-    workflows: [PR Gate]   # 注意：是 workflow name，不是 pr-gate.yml 文件名
+    workflows: [PR Gate] # 注意：是 workflow name，不是 pr-gate.yml 文件名
     types: [completed]
 ```
 
@@ -494,14 +494,14 @@ Gate **成功或失败**都会触发 Outcome；取消的 Gate 也会产生 Outco
 
 ### 相关文件
 
-| 文件 | 说明 |
-|------|------|
-| [README.md](README.md) | 全仓库 Workflow 总览 |
-| [issue-delivery.yml.md](issue-delivery.yml.md) | 上游 Draft PR |
-| [pr-outcome.yml.md](pr-outcome.yml.md) | 下游合并 / Repair / 发布 |
-| [scripts/README.md](../../scripts/README.md) | 脚本触发矩阵 |
-| [prepare-issue.mjs](../../scripts/controllers/prepare-issue.mjs) | trust 拉 Contract |
-| [record-run.mjs](../../scripts/controllers/record-run.mjs) | preview Automation Run |
-| [run-smoke.mjs](../../scripts/run-smoke.mjs) | Playwright Smoke 入口 |
-| [.ai/policy.yaml](../../.ai/policy.yaml) | 风险、保护路径与 Codex Sandbox 规则 |
-| [docs/codex-manual-operations.md](../../docs/codex-manual-operations.md) | Gate 运维与历史 Run 说明 |
+| 文件                                                                     | 说明                                |
+| ------------------------------------------------------------------------ | ----------------------------------- |
+| [README.md](README.md)                                                   | 全仓库 Workflow 总览                |
+| [issue-delivery.yml.md](issue-delivery.yml.md)                           | 上游 Draft PR                       |
+| [pr-outcome.yml.md](pr-outcome.yml.md)                                   | 下游合并 / Repair / 发布            |
+| [scripts/README.md](../../scripts/README.md)                             | 脚本触发矩阵                        |
+| [prepare-issue.mjs](../../scripts/controllers/prepare-issue.mjs)         | trust 拉 Contract                   |
+| [record-run.mjs](../../scripts/controllers/record-run.mjs)               | preview Automation Run              |
+| [run-smoke.mjs](../../scripts/run-smoke.mjs)                             | Playwright Smoke 入口               |
+| [.ai/policy.yaml](../../.ai/policy.yaml)                                 | 风险、保护路径与 Codex Sandbox 规则 |
+| [docs/codex-manual-operations.md](../../docs/codex-manual-operations.md) | Gate 运维与历史 Run 说明            |

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 2.10.0">
-  <title>GitHub Actions Workflow 结构 Diagram</title>
+  <title>SignalPatch GitHub Actions 工作流 Diagram</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -525,14 +525,14 @@
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>GitHub Actions Workflow 结构</h1>
+        <h1>SignalPatch GitHub Actions 工作流</h1>
       </div>
-      <p class="subtitle">on → permissions → jobs → steps → outputs（中文释义）</p>
+      <p class="subtitle">Supabase / Codex → 同一 Issue 生命周期 → Delivery → PR 自动化验收 → Production</p>
     </div>
 
     <!-- Main Diagram -->
     <div class="diagram-container">
-      <svg viewBox="0 0 720 820" role="img" aria-label="GitHub Actions Workflow 结构 — on → permissions → jobs → steps → outputs（中文释义） (workflow diagram)">
+      <svg viewBox="0 0 720 1148" role="img" aria-label="SignalPatch GitHub Actions 工作流 — Supabase / Codex → 同一 Issue 生命周期 → Delivery → PR 自动化验收 → Production (workflow diagram)" data-animation="trace">
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -557,68 +557,125 @@
 
         <!-- Swimlanes -->
         <rect x="40" y="52" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="74" class="t-dim" font-size="10" font-weight="600">01 / 执行与声明顺序</text>
+        <text x="54" y="74" class="t-dim" font-size="10" font-weight="600">01 / Codex 本地队列</text>
 
         <rect x="40" y="176" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="198" class="t-dim" font-size="10" font-weight="600">02 / 输出与跨 Job 传参</text>
+        <text x="54" y="198" class="t-dim" font-size="10" font-weight="600">02 / Supabase Feedback</text>
+
+        <rect x="40" y="300" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
+        <text x="54" y="322" class="t-dim" font-size="10" font-weight="600">03 / 统一 GitHub Issue</text>
+
+        <rect x="40" y="424" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
+        <text x="54" y="446" class="t-dim" font-size="10" font-weight="600">04 / Issue Delivery</text>
+
+        <rect x="40" y="548" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
+        <text x="54" y="570" class="t-dim" font-size="10" font-weight="600">05 / PR Gate 自动化验收</text>
+
+        <rect x="40" y="672" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
+        <text x="54" y="694" class="t-dim" font-size="10" font-weight="600">06 / PR Outcome</text>
+
+        <rect x="40" y="796" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
+        <text x="54" y="818" class="t-dim" font-size="10" font-weight="600">07 / Production</text>
+
+        <rect x="40" y="920" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
+        <rect x="46" y="926" width="628" height="92" rx="8" class="c-security-group" stroke-width="1"/>
+        <text x="54" y="942" class="t-security" font-size="10" font-weight="600">EX / 重复或证据不足</text>
 
         <!-- Phase headers -->
-        <line x1="42" y1="35" x2="346" y2="35" class="a-default" stroke-width="1.1"/>
-        <rect x="42" y="27" width="304" height="16" rx="4" class="c-mask"/>
-        <text x="194" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">① on</text>
-        <line x1="454" y1="35" x2="546" y2="35" class="a-default" stroke-width="1.1"/>
-        <rect x="454" y="27" width="92" height="16" rx="4" class="c-mask"/>
-        <text x="500" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">② 权限</text>
-        <line x1="579" y1="35" x2="671" y2="35" class="a-default" stroke-width="1.1"/>
-        <rect x="579" y="27" width="92" height="16" rx="4" class="c-mask"/>
-        <text x="625" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">③ jobs / steps</text>
+        <line x1="42" y1="35" x2="266" y2="35" class="a-default" stroke-width="1.1"/>
+        <rect x="42" y="27" width="224" height="16" rx="4" class="c-mask"/>
+        <text x="154" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">① 两个入口</text>
+        <line x1="254" y1="35" x2="476" y2="35" class="a-emphasis" stroke-width="1.1"/>
+        <rect x="254" y="27" width="222" height="16" rx="4" class="c-mask"/>
+        <text x="365" y="39" class="t-backend" font-size="8" font-weight="600" text-anchor="middle">② 同一 Issue</text>
+        <line x1="454" y1="35" x2="671" y2="35" class="a-dashed" stroke-width="1.1"/>
+        <rect x="454" y="27" width="217" height="16" rx="4" class="c-mask"/>
+        <text x="562.5" y="39" class="t-messagebus" font-size="8" font-weight="600" text-anchor="middle">③ 交付与发布</text>
 
         <!-- Workflow groups -->
 
 
         <!-- Edge paths -->
-        <path d="M 128 119 L 260 119" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 340 119 L 460 119" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path d="M 540 119 L 585 119" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 625 145 L 625 166 L 625 166 L 625 217" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path d="M 585 243 L 540 243" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path d="M 500 269 L 500 228 L 300 228 L 300 217" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 136 243 L 164 243" class="a-default" data-animate="edge" style="--step:0" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path d="M 136 119 L 252 119" class="a-default" data-animate="edge" style="--step:7" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path d="M 220 269 L 220 290 L 300 290 L 300 341" class="a-emphasis" data-animate="edge" style="--step:1" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 300 145 L 300 228 L 300 228 L 300 341" class="a-emphasis" data-animate="edge" style="--step:9" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 346 367 L 376 367" class="a-emphasis" data-animate="edge" style="--step:2" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 484 367 L 484 414 L 452 414 L 452 491" class="a-emphasis" data-animate="edge" style="--step:3" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 548 491 L 581 491" class="a-default" data-animate="edge" style="--step:4" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path d="M 625 517 L 625 538 L 625 538 L 625 581" class="a-emphasis" data-animate="edge" style="--step:13" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 625 649 L 625 662 L 625 662 L 625 713" class="a-emphasis" data-animate="edge" style="--step:14" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 625 765 L 625 786 L 625 786 L 625 837" class="a-emphasis" data-animate="edge" style="--step:15" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 300 393 L 300 662 L 430 662 L 430 961" class="a-security" data-animate="edge" style="--step:16" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path d="M 300 393 L 300 1045 L 625 1045 L 625 961" class="a-security" data-animate="edge" style="--step:17" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
 
         <!-- Nodes -->
-        <rect x="48" y="93" width="80" height="52" rx="6" class="c-mask"/>
-        <rect x="48" y="93" width="80" height="52" rx="6" class="c-external" stroke-width="1.5"/>
-        <text x="88" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">外部事件</text>
-        <text x="88" y="131" class="t-muted" font-size="8" text-anchor="middle">cron / dispatch…</text>
+        <rect x="40" y="217" width="96" height="52" rx="6" class="c-mask"/>
+        <rect x="40" y="217" width="96" height="52" rx="6" class="c-database" data-animate="node" style="--step:0" stroke-width="1.5"/>
+        <text x="88" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Feedback</text>
+        <text x="88" y="255" class="t-muted" font-size="8" text-anchor="middle">Supabase 待处理记录</text>
 
-        <rect x="260" y="93" width="80" height="52" rx="6" class="c-mask"/>
-        <rect x="260" y="93" width="80" height="52" rx="6" class="c-frontend" stroke-width="1.5"/>
-        <text x="300" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">on</text>
-        <text x="300" y="131" class="t-muted" font-size="8" text-anchor="middle">触发器</text>
+        <rect x="164" y="217" width="112" height="52" rx="6" class="c-mask"/>
+        <rect x="164" y="217" width="112" height="52" rx="6" class="c-backend" data-animate="node" style="--step:1" stroke-width="1.5"/>
+        <text x="220" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Feedback Intake</text>
+        <text x="220" y="255" class="t-muted" font-size="8" text-anchor="middle">collect → qualify → publish</text>
 
-        <rect x="460" y="93" width="80" height="52" rx="6" class="c-mask"/>
-        <rect x="460" y="93" width="80" height="52" rx="6" class="c-security" stroke-width="1.5"/>
-        <text x="500" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">permissions</text>
-        <text x="500" y="131" class="t-muted" font-size="8" text-anchor="middle">令牌权限</text>
+        <rect x="40" y="93" width="96" height="52" rx="6" class="c-mask"/>
+        <rect x="40" y="93" width="96" height="52" rx="6" class="c-database" data-animate="node" style="--step:8" stroke-width="1.5"/>
+        <text x="88" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">已确认 Contract</text>
+        <text x="88" y="131" class="t-muted" font-size="8" text-anchor="middle">本地受控队列</text>
 
-        <rect x="585" y="93" width="80" height="52" rx="6" class="c-mask"/>
-        <rect x="585" y="93" width="80" height="52" rx="6" class="c-backend" stroke-width="1.5"/>
-        <text x="625" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Job + steps</text>
-        <text x="625" y="131" class="t-muted" font-size="8" text-anchor="middle">jobs 内：逐步执行</text>
+        <rect x="252" y="93" width="96" height="52" rx="6" class="c-mask"/>
+        <rect x="252" y="93" width="96" height="52" rx="6" class="c-backend" data-animate="node" style="--step:9" stroke-width="1.5"/>
+        <text x="300" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">发布 Issue</text>
+        <text x="300" y="131" class="t-muted" font-size="8" text-anchor="middle">校验并发布 Issue</text>
 
-        <rect x="585" y="217" width="80" height="52" rx="6" class="c-mask"/>
-        <rect x="585" y="217" width="80" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-        <text x="625" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">步骤输出</text>
-        <text x="625" y="255" class="t-muted" font-size="8" text-anchor="middle">steps.*.outputs</text>
+        <rect x="254" y="341" width="92" height="52" rx="6" class="c-mask"/>
+        <rect x="254" y="341" width="92" height="52" rx="6" class="c-messagebus" data-animate="node" style="--step:2" stroke-width="1.5"/>
+        <text x="300" y="362" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">content:raw</text>
+        <text x="300" y="379" class="t-muted" font-size="8" text-anchor="middle">保留原始入口内容</text>
 
-        <rect x="460" y="217" width="80" height="52" rx="6" class="c-mask"/>
-        <rect x="460" y="217" width="80" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-        <text x="500" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Job 输出</text>
-        <text x="500" y="255" class="t-muted" font-size="8" text-anchor="middle">jobs.*.outputs</text>
+        <rect x="376" y="333" width="108" height="68" rx="6" class="c-mask"/>
+        <rect x="376" y="333" width="108" height="68" rx="6" class="c-messagebus" data-animate="node" style="--step:3" stroke-width="1.5"/>
+        <text x="430" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">processed</text>
+        <text x="430" y="371" class="t-muted" font-size="8" text-anchor="middle">content:processed · 原地晋升</text>
+        <text x="430" y="389" class="t-messagebus" font-size="7" text-anchor="middle">SPEC_READY 且未重复</text>
 
-        <rect x="260" y="217" width="80" height="52" rx="6" class="c-mask"/>
-        <rect x="260" y="217" width="80" height="52" rx="6" class="c-backend" stroke-width="1.5"/>
-        <text x="300" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">下一 Job</text>
-        <text x="300" y="255" class="t-muted" font-size="8" text-anchor="middle">needs + if</text>
+        <rect x="452" y="465" width="96" height="52" rx="6" class="c-mask"/>
+        <rect x="452" y="465" width="96" height="52" rx="6" class="c-backend" data-animate="node" style="--step:4" stroke-width="1.5"/>
+        <text x="500" y="486" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Issue Delivery</text>
+        <text x="500" y="503" class="t-muted" font-size="8" text-anchor="middle">显式 workflow_dispatch</text>
+
+        <rect x="581" y="465" width="88" height="52" rx="6" class="c-mask"/>
+        <rect x="581" y="465" width="88" height="52" rx="6" class="c-frontend" data-animate="node" style="--step:5" stroke-width="1.5"/>
+        <text x="625" y="486" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Draft PR</text>
+        <text x="625" y="503" class="t-muted" font-size="8" text-anchor="middle">AI 分支与变更</text>
+
+        <rect x="571" y="581" width="108" height="68" rx="6" class="c-mask"/>
+        <rect x="571" y="581" width="108" height="68" rx="6" class="c-security" data-animate="node" style="--step:14" stroke-width="1.5"/>
+        <text x="625" y="602" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">PR Gate</text>
+        <text x="625" y="619" class="t-muted" font-size="8" text-anchor="middle">verify / build / review / smoke</text>
+        <text x="625" y="637" class="t-security" font-size="7" text-anchor="middle">不是 Required Checks</text>
+
+        <rect x="572" y="713" width="106" height="52" rx="6" class="c-mask"/>
+        <rect x="572" y="713" width="106" height="52" rx="6" class="c-backend" data-animate="node" style="--step:15" stroke-width="1.5"/>
+        <text x="625" y="734" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">PR Outcome</text>
+        <text x="625" y="751" class="t-muted" font-size="8" text-anchor="middle">Repair 或 finalize</text>
+
+        <rect x="571" y="837" width="108" height="52" rx="6" class="c-mask"/>
+        <rect x="571" y="837" width="108" height="52" rx="6" class="c-cloud" data-animate="node" style="--step:16" stroke-width="1.5"/>
+        <text x="625" y="858" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Production</text>
+        <text x="625" y="875" class="t-muted" font-size="8" text-anchor="middle">promote + smoke + 关 Issue</text>
+
+        <rect x="378" y="961" width="104" height="52" rx="6" class="c-mask"/>
+        <rect x="378" y="961" width="104" height="52" rx="6" class="c-security" data-animate="node" style="--step:17" stroke-width="1.5"/>
+        <text x="430" y="982" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ai:needs-input</text>
+        <text x="430" y="999" class="t-muted" font-size="8" text-anchor="middle">Issue 保持 raw</text>
+
+        <rect x="571" y="961" width="108" height="52" rx="6" class="c-mask"/>
+        <rect x="571" y="961" width="108" height="52" rx="6" class="c-security" data-animate="node" style="--step:18" stroke-width="1.5"/>
+        <text x="625" y="982" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">duplicate</text>
+        <text x="625" y="999" class="t-muted" font-size="8" text-anchor="middle">评论 canonical Issue 并关闭</text>
 
         <!-- Edge labels -->
 
@@ -628,18 +685,26 @@
 
 
 
+
+
+
+        <rect x="340.8" y="642" width="48.4" height="14" rx="3" class="c-mask"/>
+        <text x="365" y="652" class="t-security" font-size="8" text-anchor="middle">证据不足</text>
+        <rect x="419.1" y="1025" width="86.8" height="14" rx="3" class="c-mask"/>
+        <text x="462.5" y="1035" class="t-security" font-size="8" text-anchor="middle">Problem 指纹重复</text>
+
         <!-- Legend -->
-        <text x="175" y="304" class="t-primary" font-size="10" font-weight="600">Legend</text>
-        <rect x="175" y="316" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
-        <text x="195" y="324" class="t-muted" font-size="7">User UI</text>
-        <rect x="260" y="316" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
-        <text x="280" y="324" class="t-muted" font-size="7">Agent logic</text>
-        <rect x="370" y="316" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
-        <text x="390" y="324" class="t-muted" font-size="7">Policy</text>
-        <rect x="455" y="316" width="14" height="9" rx="2" class="c-messagebus" stroke-width="1"/>
-        <text x="475" y="324" class="t-muted" font-size="7">Tool action</text>
-        <rect x="565" y="316" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
-        <text x="585" y="324" class="t-muted" font-size="7">Context / trace</text>
+        <text x="175" y="1048" class="t-primary" font-size="10" font-weight="600">Legend</text>
+        <rect x="175" y="1060" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
+        <text x="195" y="1068" class="t-muted" font-size="7">User UI</text>
+        <rect x="260" y="1060" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
+        <text x="280" y="1068" class="t-muted" font-size="7">Agent logic</text>
+        <rect x="370" y="1060" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
+        <text x="390" y="1068" class="t-muted" font-size="7">Policy</text>
+        <rect x="455" y="1060" width="14" height="9" rx="2" class="c-messagebus" stroke-width="1"/>
+        <text x="475" y="1068" class="t-muted" font-size="7">Tool action</text>
+        <rect x="565" y="1060" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
+        <text x="585" y="1068" class="t-muted" font-size="7">Context / trace</text>
       </svg>
     </div>
 
@@ -648,60 +713,36 @@
       <div class="card">
         <div class="card-header">
           <div class="card-dot cyan"></div>
-          <h3>on 触发器</h3>
+          <h3>统一 Issue 入口</h3>
         </div>
         <ul>
-          <li>&bull; 声明 Workflow 在什么事件下运行</li>
-          <li>&bull; 例：schedule cron、workflow_dispatch 手动</li>
-          <li>&bull; 例：pull_request、issues.opened、workflow_run</li>
+          <li>&bull; Supabase Feedback 与 Codex 对话都创建 GitHub Issue</li>
+          <li>&bull; 创建时标记 content:raw，资格通过后原地改为 content:processed</li>
+          <li>&bull; Issue Delivery 只接受 processed Issue 和显式 dispatch</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot rose"></div>
-          <h3>permissions 权限</h3>
+          <h3>重复处理</h3>
         </div>
         <ul>
-          <li>&bull; 限制 GITHUB_TOKEN 可读/可写范围</li>
-          <li>&bull; Workflow 级默认；单个 Job 可收紧或放宽</li>
-          <li>&bull; 例：顶层 contents: read；publish Job 另开 issues: write</li>
+          <li>&bull; 两个入口共用 Problem 指纹</li>
+          <li>&bull; 重复 Issue 评论 canonical Issue</li>
+          <li>&bull; 当前 Issue 保留 raw、添加 duplicate 并关闭</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot emerald"></div>
-          <h3>jobs 与 steps</h3>
+          <h3>放宽后的 main</h3>
         </div>
         <ul>
-          <li>&bull; jobs：具名 Job；needs 决定等待哪些上游 Job</li>
-          <li>&bull; steps：同一 Job 内顺序执行；uses 或 run</li>
-          <li>&bull; if: needs.&lt;job&gt;.outputs.&lt;name&gt; 控制是否运行</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot amber"></div>
-          <h3>outputs 产出</h3>
-        </div>
-        <ul>
-          <li>&bull; 步骤：echo &quot;k=v&quot; &gt;&gt; $GITHUB_OUTPUT</li>
-          <li>&bull; Job：outputs 块映射 steps.&lt;id&gt;.outputs</li>
-          <li>&bull; 跨 Job 文件：upload-artifact / download-artifact</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot cyan"></div>
-          <h3>feedback-intake 对照</h3>
-        </div>
-        <ul>
-          <li>&bull; collect → qualify → publish 三个 Job</li>
-          <li>&bull; collect.outputs.has_feedback 供 qualify 的 if</li>
-          <li>&bull; scan 步骤 id 供 outputs 引用</li>
+          <li>&bull; 仓库没有 Ruleset 或 Branch Protection</li>
+          <li>&bull; 不要求 Pull Request 或 Required status checks</li>
+          <li>&bull; PR Gate 仍决定自动化是否进入 PR Outcome</li>
         </ul>
       </div>
     </div>

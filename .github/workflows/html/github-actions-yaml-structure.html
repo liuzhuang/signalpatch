@@ -527,12 +527,12 @@
         <div class="pulse-dot"></div>
         <h1>GitHub Actions YAML 层级结构</h1>
       </div>
-      <p class="subtitle">workflow.yml 文件内 on / permissions / jobs / steps / outputs 的嵌套关系</p>
+      <p class="subtitle">当前五条 workflow.yml 内 on / permissions / jobs / steps / outputs 的嵌套关系</p>
     </div>
 
     <!-- Main Diagram -->
     <div class="diagram-container">
-      <svg viewBox="0 0 1100 466" role="img" aria-label="GitHub Actions YAML 层级结构 — workflow.yml 文件内 on / permissions / jobs / steps / outputs 的嵌套关系 (architecture diagram)">
+      <svg viewBox="0 0 1100 466" role="img" aria-label="GitHub Actions YAML 层级结构 — 当前五条 workflow.yml 内 on / permissions / jobs / steps / outputs 的嵌套关系 (architecture diagram)">
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -671,13 +671,13 @@
       <div class="card">
         <div class="card-header">
           <div class="card-dot cyan"></div>
-          <h3>feedback-intake 示例</h3>
+          <h3>当前入口示例</h3>
         </div>
         <ul>
-          <li>&bull; on: schedule + workflow_dispatch</li>
-          <li>&bull; permissions: contents: read（Workflow 级）</li>
-          <li>&bull; jobs: collect → qualify → publish</li>
-          <li>&bull; collect.outputs.has_feedback → qualify 的 if</li>
+          <li>&bull; Feedback Intake：schedule + workflow_dispatch</li>
+          <li>&bull; Conversation Publisher：schedule + workflow_dispatch</li>
+          <li>&bull; Issue Delivery：仅 workflow_dispatch(issue_number)</li>
+          <li>&bull; PR Gate：pull_request；PR Outcome：workflow_run</li>
         </ul>
       </div>
 
@@ -690,6 +690,18 @@
           <li>&bull; 步骤内：steps.scan.outputs.has_feedback</li>
           <li>&bull; Job 间：needs.collect.outputs.has_feedback</li>
           <li>&bull; Job 输出定义：${{ steps.scan.outputs.has_feedback }}</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>仓库规则边界</h3>
+        </div>
+        <ul>
+          <li>&bull; YAML 定义自动化如何运行，不等同于 main 分支保护</li>
+          <li>&bull; 当前仓库没有 Ruleset 或 Branch Protection</li>
+          <li>&bull; PR Gate Check 只用于自动化验收，不是 Required Checks</li>
         </ul>
       </div>
     </div>

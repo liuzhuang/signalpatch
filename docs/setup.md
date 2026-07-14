@@ -121,6 +121,9 @@ Repository permissions：
 
 创建以下 Label：
 
+- `content:raw`
+- `content:processed`
+- `duplicate`
 - `ai:ready`
 - `ai:building`
 - `ai:verifying`
@@ -139,17 +142,17 @@ Repository permissions：
 - `production`：供 R0/R1 的最终发布 Job 使用，不设置人工审批。
 - `r2-approval`：设置 Required reviewers，供 R2 最终发布前人工审批。
 
-### Ruleset
+### `main` 写入策略
 
-为 `main` 创建分支 Ruleset：
+当前仓库不配置 Ruleset，也不配置旧版 Branch Protection：
 
-- 禁止删除和强制推送。
-- 不要求 Pull Request，允许正常 fast-forward push 到 `main`。
-- 不配置 Required status checks。PR Gate 仍运行 `verify`、`build`、`independent-review` 和 `preview-smoke`，结果只供自动化验收与排障使用。
+- 不要求通过 Pull Request 写入 `main`。
+- 不配置 Required status checks。
+- 普通 push、直接写入、强制推送和分支删除不由仓库规则拦截。
 
-Ruleset 在 GitHub 仓库服务端配置，不保存在仓库中的 YAML 文件。配置入口为 `Settings -> Rules -> Rulesets`；旧版分支保护入口为 `Settings -> Branches -> Branch protection rules`。`.github/workflows/*.yml` 只定义检查如何运行，不能解除 `main` 的保护规则。
+PR Gate 仍运行 `verify`、`build`、`independent-review` 和 `preview-smoke`。这些结果只驱动 SignalPatch 自动化自己的验收、Repair、合并和发布流程，不是 GitHub 服务端合并条件。
 
-直接执行普通 `git push origin main` 应成功；删除 `main` 或使用强制推送仍会被 Ruleset 拒绝。
+这项设置属于 GitHub 仓库服务端状态，不保存在 `.github/workflows/*.yml` 中。可分别在 `Settings -> Rules -> Rulesets` 和 `Settings -> Branches -> Branch protection rules` 核对；两处都应为空。放宽分支约束不会改变 GitHub App、Environment、Secret 隔离、Issue Contract 或 exact-head 验收逻辑。
 
 ## 自托管 macOS Runner
 
@@ -189,6 +192,6 @@ self-hosted, macOS, ARM64, signalpatch
 
 - `signalpatch` schema 的 Migration 已在远端应用，匿名 RPC 实测通过，直接表读取被拒绝。
 - Vercel 初始 Production Deployment 的 `/health` 返回成功。
-- GitHub App、Variables、Secrets、Labels、Environments、Ruleset 都已配置。
+- GitHub App、Variables、Secrets、Labels 和 Environments 都已配置；Rulesets 与 Branch protection rules 均为空。
 - 专用 Runner 在线且显示四个预期 Label。
-- 四条 Workflow 可被 GitHub 解析，并至少完成一次真实闭环。
+- 五条 Workflow 可被 GitHub 解析，并至少完成一次真实闭环。

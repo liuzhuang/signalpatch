@@ -61,7 +61,7 @@ jobs:
             issue_number="${BASH_REMATCH[1]}"
             node scripts/controllers/prepare-issue.mjs "$issue_number" .ai/runs/outcome
             risk_level=$(node -e 'const c=require("./.ai/runs/outcome/contract.json"); process.stdout.write(c.riskLevel)')
-          # 手工 codex/* PR 仅用于通过 Required Checks；本 Workflow 不替它自动合并或发布。
+          # 手工 codex/* PR 仅运行自动化验收；本 Workflow 不替它自动合并或发布。
           elif [[ "$branch" =~ ^codex/ ]] && [[ "$author" == "$REPOSITORY_OWNER" ]]; then
             mode=manual
             risk_level=R2
