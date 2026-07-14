@@ -7,6 +7,12 @@ on:
   workflow_run:
     workflows: [PR Gate]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      gate_run_id:
+        description: Successful PR Gate run ID to finalize
+        required: true
+        type: string
 
 # 顶层保持只读；重跑、Repair 发布、合并和 Issue 更新分别在需要的 Job 中提升权限。
 permissions:
@@ -17,7 +23,7 @@ permissions:
 
 # 一个 Gate Run 只处理一次 Outcome；失败后的新提交会产生新的 PR Gate 和新的 workflow_run.id。
 concurrency:
-  group: pr-outcome-${{ github.event.workflow_run.id }}
+  group: pr-outcome-${{ inputs.gate_run_id || github.event.workflow_run.id }}
   cancel-in-progress: false
 
 jobs:
@@ -41,11 +47,13 @@ jobs:
         env:
           APP_BOT: ${{ vars.SIGNALPATCH_APP_BOT }}
           GH_TOKEN: ${{ github.token }}
-          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          RUN_PULL_REQUESTS: ${{ toJson(github.event.workflow_run.pull_requests) }}
+          GATE_RUN_ID: ${{ inputs.gate_run_id || github.event.workflow_run.id }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
+          gate_run=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GATE_RUN_ID}")
+          RUN_CONCLUSION=$(node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write(r.conclusion)' "$gate_run")
+          RUN_HEAD_SHA=$(node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write(r.head_sha)' "$gate_run")
+          RUN_PULL_REQUESTS=$(node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(r.pull_requests))' "$gate_run")
           # 没有关联 PR 或关联多个 PR 都安全失败，防止把结果写到无法唯一归属的变更上。
           [[ $(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p.length))' "$RUN_PULL_REQUESTS") == "1" ]]
           pr_number=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p[0].number))' "$RUN_PULL_REQUESTS")
@@ -106,7 +114,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ID: ${{ inputs.gate_run_id || github.event.workflow_run.id }}
         run: |
           mkdir -p .ai/runs/outcome
           gh run view "$RUN_ID" --log-failed > .ai/runs/outcome/failure.log
@@ -321,7 +329,7 @@ jobs:
           path: .ai/runs/outcome
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ inputs.gate_run_id || github.event.workflow_run.id }}
       # 防止 Gate 结束后 PR 又被 push：若 head 已变，不签发 App Token 做 merge/promote。
       - name: Revalidate current PR head before reading write credentials
         env:
