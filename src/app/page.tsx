@@ -1,5 +1,6 @@
 import { FeedbackForm } from "@/components/feedback-form";
 import { StatusForm } from "@/components/status-form";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 ////////////////////////////////////////////////////
 // 首页只展示自动化阶段、Feedback 提交入口和 Repair Status 查询入口，不承载管理功能
@@ -8,8 +9,11 @@ export default function Home() {
   return (
     <main>
       <header className="hero">
-        <div className="eyebrow">
-          <span /> AI-native issue delivery reference
+        <div className="hero-topline">
+          <div className="eyebrow">
+            <span /> AI-native issue delivery reference
+          </div>
+          <ThemeToggle />
         </div>
         <h1>
           Signal<span>Patch</span>

@@ -1,12 +1,62 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: dark;
   --background: #07090d;
   --foreground: #f4f6f8;
   --muted: #929aa5;
   --line: #272c35;
   --panel: #0d1118;
   --accent: #ff5c35;
+  --accent-glow: rgba(255, 92, 53, 0.14);
+  --grid-line: rgba(255, 255, 255, 0.025);
+  --hero-copy: #bac0c8;
+  --label: #cfd3d8;
+  --input-border: #313743;
+  --input-background: #090c11;
+  --button-foreground: #150802;
+  --result-code: #f6b19f;
+  --link: #d7dbe0;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --background: #f7f8fa;
+  --foreground: #171a1f;
+  --muted: #626b77;
+  --line: #d9dee5;
+  --panel: #ffffff;
+  --accent: #d94828;
+  --accent-glow: rgba(217, 72, 40, 0.12);
+  --grid-line: rgba(23, 26, 31, 0.045);
+  --hero-copy: #4b5563;
+  --label: #4b5563;
+  --input-border: #c8ced7;
+  --input-background: #ffffff;
+  --button-foreground: #ffffff;
+  --result-code: #a83820;
+  --link: #29313c;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --background: #f7f8fa;
+    --foreground: #171a1f;
+    --muted: #626b77;
+    --line: #d9dee5;
+    --panel: #ffffff;
+    --accent: #d94828;
+    --accent-glow: rgba(217, 72, 40, 0.12);
+    --grid-line: rgba(23, 26, 31, 0.045);
+    --hero-copy: #4b5563;
+    --label: #4b5563;
+    --input-border: #c8ced7;
+    --input-background: #ffffff;
+    --button-foreground: #ffffff;
+    --result-code: #a83820;
+    --link: #29313c;
+  }
 }
 
 @theme inline {
@@ -30,13 +80,9 @@ body {
 main {
   min-height: 100vh;
   background:
-    radial-gradient(
-      circle at 72% -10%,
-      rgba(255, 92, 53, 0.14),
-      transparent 32rem
-    ),
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    radial-gradient(circle at 72% -10%, var(--accent-glow), transparent 32rem),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size:
     auto,
     48px 48px,
@@ -53,6 +99,13 @@ footer {
 .hero {
   padding: 96px 0 64px;
   border-bottom: 1px solid var(--line);
+}
+
+.hero-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
 }
 
 .eyebrow {
@@ -87,7 +140,7 @@ h1 span {
 .hero > p {
   max-width: 660px;
   margin: 28px 0 36px;
-  color: #bac0c8;
+  color: var(--hero-copy);
   font-size: 18px;
   line-height: 1.7;
 }
@@ -154,7 +207,7 @@ h2 {
 }
 
 label {
-  color: #cfd3d8;
+  color: var(--label);
   font: 600 12px/1 var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -163,10 +216,10 @@ label {
 input,
 textarea {
   width: 100%;
-  border: 1px solid #313743;
+  border: 1px solid var(--input-border);
   border-radius: 4px;
   padding: 15px 16px;
-  background: #090c11;
+  background: var(--input-background);
   color: var(--foreground);
   font: 15px/1.6 var(--font-sans);
   outline: none;
@@ -185,7 +238,7 @@ button {
   border-radius: 4px;
   padding: 13px 18px;
   background: var(--accent);
-  color: #150802;
+  color: var(--button-foreground);
   font: 700 14px/1 var(--font-sans);
   cursor: pointer;
 }
@@ -193,6 +246,20 @@ button {
 button:disabled {
   opacity: 0.55;
   cursor: wait;
+}
+
+.theme-toggle {
+  align-self: auto;
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  background: var(--panel);
+  color: var(--foreground);
+  font: 600 12px/1 var(--font-mono);
+}
+
+button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .message {
@@ -210,7 +277,7 @@ button:disabled {
   margin-top: auto;
   padding: 18px;
   border-left: 2px solid var(--accent);
-  background: #090c11;
+  background: var(--input-background);
 }
 
 .result span,
@@ -220,7 +287,7 @@ button:disabled {
 
 .result code {
   overflow-wrap: anywhere;
-  color: #f6b19f;
+  color: var(--result-code);
 }
 
 footer {
@@ -233,7 +300,7 @@ footer {
 
 footer a {
   margin-left: auto;
-  color: #d7dbe0;
+  color: var(--link);
   text-decoration: none;
 }
 
