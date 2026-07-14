@@ -1,21 +1,25 @@
 name: PR Outcome
 
+# 只消费已完成的 PR Gate。workflow_run 拥有目标分支权限，因此必须先重新验证关联 PR、作者和 Head SHA。
 on:
   workflow_run:
     workflows: [PR Gate]
     types: [completed]
 
+# 顶层保持只读；重跑、Repair 发布、合并和 Issue 更新分别在需要的 Job 中提升权限。
 permissions:
   actions: read
   contents: read
   issues: read
   pull-requests: read
 
+# 一个 Gate Run 只处理一次 Outcome；失败后的新提交会产生新的 PR Gate 和新的 workflow_run.id。
 concurrency:
   group: pr-outcome-${{ github.event.workflow_run.id }}
   cancel-in-progress: false
 
 jobs:
+  # 不信任 workflow_run 附带的 PR 摘要：重新查询唯一 PR，并确认它仍指向触发 Gate 的同一 SHA。
   trust:
     runs-on: ubuntu-latest
     outputs:
@@ -39,6 +43,7 @@ jobs:
           RUN_PULL_REQUESTS: ${{ toJson(github.event.workflow_run.pull_requests) }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
+          # 没有关联 PR 或关联多个 PR 都安全失败，防止把结果写到无法唯一归属的变更上。
           [[ $(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p.length))' "$RUN_PULL_REQUESTS") == "1" ]]
           pr_number=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p[0].number))' "$RUN_PULL_REQUESTS")
           pr=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")
@@ -53,6 +58,7 @@ jobs:
             issue_number="${BASH_REMATCH[1]}"
             node scripts/controllers/prepare-issue.mjs "$issue_number" .ai/runs/outcome
             risk_level=$(node -e 'const c=require("./.ai/runs/outcome/contract.json"); process.stdout.write(c.riskLevel)')
+          # 手工 codex/* PR 仅用于通过 Required Checks；本 Workflow 不替它自动合并或发布。
           elif [[ "$branch" =~ ^codex/ ]] && [[ "$author" == "$REPOSITORY_OWNER" ]]; then
             mode=manual
             risk_level=R2
@@ -76,6 +82,7 @@ jobs:
           path: .ai/runs/outcome
           retention-days: 7
 
+  # 只处理自动化 PR 的失败 Gate：压缩失败日志，生成稳定指纹，并区分基础设施与应用失败。
   collect-failure:
     needs: trust
     if: needs.trust.outputs.mode == 'automation' && needs.trust.outputs.conclusion != 'success'
@@ -108,6 +115,7 @@ jobs:
           fingerprint=$(node -p 'require("./.ai/runs/outcome/failure.json").fingerprint')
           echo "failure_kind=$kind" >> "$GITHUB_OUTPUT"
           echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+          # 基础设施故障只原样重跑一次，不让 Codex 修改业务代码来掩盖 Runner 或网络问题。
           if [[ "$kind" == "infrastructure" && "$RUN_ATTEMPT" == "1" ]]; then
             gh run rerun "$RUN_ID" --failed
           fi
@@ -117,6 +125,7 @@ jobs:
           path: .ai/runs/outcome
           retention-days: 7
 
+  # 只有 application 失败进入 Repair；Codex 在当前 PR Head 上做一次聚焦修改，仍不接触外部写凭据。
   repair:
     needs: [trust, collect-failure]
     if: needs.trust.outputs.mode == 'automation' && needs.collect-failure.outputs.failure_kind == 'application'
@@ -140,9 +149,11 @@ jobs:
         env:
           FINGERPRINT: ${{ needs.collect-failure.outputs.fingerprint }}
         run: |
+          # origin/main 之后第一条是 Builder 提交，其余才是 Repair；由此计算下一次尝试编号。
           repair_count=$(($(git rev-list --count origin/main..HEAD) - 1))
           next_attempt=$((repair_count + 1))
           node scripts/ai/check-repair-budget.mjs "$next_attempt" "$FINGERPRINT"
+          # 每次 Repair 把失败指纹写入提交信息；同一指纹再次出现时在调用模型前停止循环。
           ! git log --format=%B origin/main..HEAD | grep -Fq "failure:${FINGERPRINT}"
       - name: Render Repair prompt
         run: |
@@ -153,6 +164,7 @@ jobs:
             > .ai/runs/outcome/repair-prompt.md
       - name: Repair with Codex
         run: |
+          # env -i 阻断 Runner 上的 GitHub、Supabase 和 Vercel 环境，只保留本地 Codex 登录。
           env -i \
             HOME="$HOME" \
             PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
@@ -164,6 +176,7 @@ jobs:
             - < .ai/runs/outcome/repair-prompt.md
       - name: Validate Repair patch
         run: |
+          # 新文件也必须进入 Diff；空 Patch、越界路径或风险升级都会在上传 Artifact 前失败。
           git add --intent-to-add -- .
           node scripts/ai/validate-json.mjs \
             .ai/schemas/delivery-output.schema.json \
@@ -181,6 +194,7 @@ jobs:
             .ai/runs/outcome/repair.json
           retention-days: 7
 
+  # 在独立 Ubuntu Job 应用 Patch、复验策略，再由短时 App Token 推送到原 PR 分支触发下一轮 Gate。
   publish-repair:
     needs: [trust, collect-failure, repair]
     runs-on: ubuntu-latest
@@ -245,6 +259,7 @@ jobs:
             --contract .ai/runs/outcome/contract.json
           gh issue edit "${{ needs.trust.outputs.issue_number }}" --add-label "ai:repairing"
 
+  # Repair 的次数、重复指纹、空 Diff 或策略检查失败都收敛到人工处理，不无限重启。
   mark-human-required:
     needs: [trust, collect-failure, repair]
     if: always() && needs.trust.outputs.mode == 'automation' && needs.collect-failure.outputs.failure_kind == 'application' && needs.repair.result == 'failure'
@@ -264,6 +279,7 @@ jobs:
           gh issue edit "${{ needs.trust.outputs.issue_number }}" --add-label "ai:human-required"
           gh issue comment "${{ needs.trust.outputs.issue_number }}" --body "The bounded Repair loop stopped because its policy or attempt guard failed. Human review is required."
 
+  # 仅自动化 PR 且 Gate 全绿才合并发布；R2 先等待 r2-approval，R0/R1 进入 production 环境。
   finalize:
     needs: trust
     if: needs.trust.outputs.mode == 'automation' && needs.trust.outputs.conclusion == 'success'
@@ -302,6 +318,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Artifact 下载后再次查询实时 Head；若 PR 已被追加提交，后续 App Token 步骤不会执行。
           current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${{ needs.trust.outputs.pr_number }}" --jq .head.sha)
           [[ "$current" == "${{ needs.trust.outputs.head_sha }}" ]]
       - id: app-token
@@ -327,8 +344,10 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
+          # 提升 PR Gate 已通过 Smoke Test 的原 Deployment，不从合并后的 main 重新构建另一份产物。
           deployment_url=$(node -p 'require("./.ai/runs/outcome/deployment.json").deploymentUrl')
           pnpm exec vercel promote "$deployment_url" --yes --token="$VERCEL_TOKEN"
+          # 生产 Smoke 失败立即请求回滚、清理合成数据并保留 Issue 给人工，不会写 ai:done 或关闭 Issue。
           if ! SMOKE_TRACKING_IDS_FILE=.ai/runs/outcome/smoke-tracking-ids.txt \
             pnpm test:smoke -- --base-url="$PRODUCTION_URL"; then
             pnpm exec vercel rollback --yes --token="$VERCEL_TOKEN" || true

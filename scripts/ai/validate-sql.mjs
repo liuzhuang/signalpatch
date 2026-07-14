@@ -7,6 +7,10 @@ if (!migrationPath) {
 }
 
 const sql = (await readFile(migrationPath, "utf8")).toLowerCase();
+
+////////////////////////////////////////////////////
+// 确认最小领域表、RLS、安全函数和匿名 RPC 授权都存在于 signalpatch Schema
+////////////////////////////////////////////////////
 const required = [
   "create schema if not exists signalpatch",
   "create table signalpatch.feedback",
@@ -22,6 +26,10 @@ const required = [
   "grant execute on function signalpatch.get_repair_status",
 ];
 const missing = required.filter((statement) => !sql.includes(statement));
+
+////////////////////////////////////////////////////
+// 显式拒绝把业务表建到 public 或向匿名角色授予整库权限
+////////////////////////////////////////////////////
 const forbidden = [
   "create table public.feedback",
   "create table public.problems",

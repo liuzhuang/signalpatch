@@ -2,6 +2,9 @@
 
 import { useState, type FormEvent } from "react";
 
+////////////////////////////////////////////////////
+// 表单只读取 API 响应中的匿名 Tracking ID 和初始 Repair Status
+////////////////////////////////////////////////////
 interface SubmitResult {
   trackingId: string;
   repairStatus: string;
@@ -13,6 +16,9 @@ export function FeedbackForm() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  ////////////////////////////////////////////////////
+  // 提交前清除上次结果，并附加当前功能、页面路由和发生时间作为脱敏 Feedback Context
+  ////////////////////////////////////////////////////
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
@@ -36,6 +42,10 @@ export function FeedbackForm() {
       if (!response.ok) {
         throw new Error(body.error ?? "Feedback 提交失败");
       }
+
+      ////////////////////////////////////////////////////
+      // 成功后保留 Tracking ID 供后续查询，同时清空已提交的 Feedback 正文
+      ////////////////////////////////////////////////////
       setResult(body);
       setMessage("");
     } catch (submitError) {

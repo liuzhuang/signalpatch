@@ -6,6 +6,10 @@ if (!logPath) {
   throw new Error("Usage: classify-failure.mjs <failure-log>");
 }
 const log = (await readFile(logPath, "utf8")).toLowerCase();
+
+////////////////////////////////////////////////////
+// 只把可短暂恢复的 Runner、网络和服务异常归为基础设施故障，其余交给应用 Repair
+////////////////////////////////////////////////////
 const infrastructurePatterns = [
   "runner lost communication",
   "the operation was canceled",

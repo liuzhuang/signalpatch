@@ -22,6 +22,10 @@ const issue = await requestJson(
     },
   },
 );
+
+////////////////////////////////////////////////////
+// Delivery 只接收带 SignalPatch 自动化标签且正文包含标准 Contract 标记的 Issue
+////////////////////////////////////////////////////
 if (!issue.labels.some((label) => label.name.startsWith("ai:"))) {
   throw new Error("Issue does not have a SignalPatch automation label");
 }
@@ -32,6 +36,9 @@ if (!match) {
   throw new Error("Issue does not contain a SignalPatch Issue Contract");
 }
 
+////////////////////////////////////////////////////
+// 只把 Contract 与最小 Issue 元数据写入运行目录，不把整段不可信正文传给 Codex
+////////////////////////////////////////////////////
 await mkdir(outputDirectory, { recursive: true });
 await writeFile(`${outputDirectory}/contract.json`, `${match[1].trim()}\n`);
 await writeFile(

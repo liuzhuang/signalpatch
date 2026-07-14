@@ -15,6 +15,10 @@ const paths = (await readFile(pathsFile, "utf8"))
   .split("\n")
   .map((value) => value.trim())
   .filter(Boolean);
+
+////////////////////////////////////////////////////
+// 将模型建议风险与实际修改路径合并计算；策略只能上调风险，不能被模型降级
+////////////////////////////////////////////////////
 const policy = await loadPolicy(policyFile);
 const riskLevel = requiredRisk(policy, paths, proposedRisk);
 

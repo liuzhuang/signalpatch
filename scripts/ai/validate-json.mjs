@@ -12,6 +12,10 @@ if (!schemaPath || !dataPath) {
 const schema = JSON.parse(await readFile(schemaPath, "utf8"));
 const data = JSON.parse(await readFile(dataPath, "utf8"));
 const ajv = new Ajv2020({ allErrors: true, strict: true });
+
+////////////////////////////////////////////////////
+// 预加载同目录中带 $id 的 Schema，使根 Schema 可以解析本地跨文件引用
+////////////////////////////////////////////////////
 for (const file of await readdir(dirname(schemaPath))) {
   if (
     file.endsWith(".schema.json") &&
@@ -25,6 +29,10 @@ for (const file of await readdir(dirname(schemaPath))) {
     }
   }
 }
+
+////////////////////////////////////////////////////
+// 输出全部校验错误供控制器和 Repair 使用，并用非零退出码阻断后续阶段
+////////////////////////////////////////////////////
 const validate = ajv.compile(schema);
 const valid = validate(data);
 process.stdout.write(

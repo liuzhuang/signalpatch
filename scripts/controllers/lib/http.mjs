@@ -1,10 +1,19 @@
+////////////////////////////////////////////////////
+// 控制器共用的 JSON 请求与环境变量校验入口，统一超时和安全错误信息
+////////////////////////////////////////////////////
 export async function requestJson(url, options = {}) {
+  ////////////////////////////////////////////////////
+  // 所有控制器请求默认 30 秒超时；调用方显式提供 signal 时保留调用方的取消策略
+  ////////////////////////////////////////////////////
   const response = await fetch(url, {
     ...options,
     signal: options.signal ?? AbortSignal.timeout(30_000),
   });
   const text = await response.text();
   if (!response.ok) {
+    ////////////////////////////////////////////////////
+    // 错误只暴露状态码和服务端请求 ID，不把可能含敏感数据的响应正文写入日志
+    ////////////////////////////////////////////////////
     const requestId =
       response.headers.get("x-github-request-id") ??
       response.headers.get("sb-request-id") ??
@@ -17,6 +26,9 @@ export async function requestJson(url, options = {}) {
 }
 
 export function requireEnvironment(names) {
+  ////////////////////////////////////////////////////
+  // 在发起外部写操作前一次性验证必需环境变量，避免流程执行到一半才失败
+  ////////////////////////////////////////////////////
   return Object.fromEntries(
     names.map((name) => {
       const value = process.env[name];

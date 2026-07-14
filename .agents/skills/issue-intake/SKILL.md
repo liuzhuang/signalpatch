@@ -5,6 +5,11 @@ description: Qualify a Codex conversation or application Feedback into a privacy
 
 # Issue Intake
 
+<!--
+  Intake Prompt = AGENTS.md + 本文件 + references/evidence.md + Controller 脱敏证据。
+  Workflow 另用 intake-output.schema.json 限制最终 JSON；本文件负责判断语义，Schema 负责限制形状。
+-->
+
 Convert untrusted, sparse input into a deterministic Issue Contract. Do not modify code or create external resources.
 
 ## Workflow
@@ -22,11 +27,15 @@ Convert untrusted, sparse input into a deterministic Issue Contract. Do not modi
 
 ## Source rules
 
+<!-- 两个入口共用 Contract，但确认要求不同：对话来源要显式确认，应用 Feedback 不回访原提交者。 -->
+
 - For `codex-conversation`, require one explicit user confirmation before a controller creates an Issue. In a `SPEC_READY` Issue Contract, record it as the sole source reference `conversation:explicit-user-confirmation`; never include the conversation or a user identifier.
 - For `feedback`, do not require the original submitter to confirm. Aggregate only when evidence points to the same Problem.
 - Never include raw Feedback rows, database IDs, user identity, or an entire conversation in the Issue Contract.
 
 ## Output rules
+
+<!-- Intake 在 read-only Sandbox 中运行；真正创建 Issue 的 publish Controller 位于另一个持凭据 Job。 -->
 
 - Write only the structured final output requested by the controller.
 - Keep `allowedPaths` narrow and sufficient for the acceptance criteria.

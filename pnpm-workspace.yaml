@@ -1,6 +1,8 @@
+# pnpm 10 默认拦截依赖安装脚本；只允许项目实际需要编译原生/平台产物的三个包执行。
 allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+# 锁定 PostCSS 的解析版本，确保所有传递依赖使用同一安全版本。
 overrides:
   postcss: 8.5.10

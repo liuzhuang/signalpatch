@@ -3,6 +3,9 @@ import { readFile } from "node:fs/promises";
 
 import Ajv2020 from "ajv/dist/2020.js";
 
+////////////////////////////////////////////////////
+// 模块加载时编译统一 Issue Contract Schema，后续入队和发布共用同一校验器
+////////////////////////////////////////////////////
 const issueContractSchema = JSON.parse(
   await readFile(
     new URL("../../../.ai/schemas/issue-contract.schema.json", import.meta.url),
@@ -21,6 +24,9 @@ function failure(message) {
   throw new Error(`Invalid conversation issue request: ${message}`);
 }
 
+////////////////////////////////////////////////////
+// 对话来源除 Schema 合法外，还必须带唯一且固定的显式用户确认引用
+////////////////////////////////////////////////////
 export function assertConversationContract(contract) {
   if (!validateIssueContract(contract)) {
     failure(
@@ -45,6 +51,9 @@ export function newConversationRequest(
   contract,
   submittedAt = new Date().toISOString(),
 ) {
+  ////////////////////////////////////////////////////
+  // 为每次已确认 Contract 生成独立请求 ID，供本地队列和 GitHub 发布防重
+  ////////////////////////////////////////////////////
   return {
     version: 1,
     requestId: randomUUID(),
@@ -54,6 +63,9 @@ export function newConversationRequest(
 }
 
 export function assertConversationRequest(request) {
+  ////////////////////////////////////////////////////
+  // 发布器不信任队列文件，因此重新检查封装版本、UUID、时间和内层 Contract
+  ////////////////////////////////////////////////////
   if (!request || typeof request !== "object" || Array.isArray(request)) {
     failure("request must be an object");
   }
@@ -78,6 +90,10 @@ export function assertConversationRequest(request) {
 
 export function issueBodyForRequest(request) {
   const { contract, requestId } = assertConversationRequest(request);
+
+  ////////////////////////////////////////////////////
+  // 人类可读摘要与机器可读 Contract 同时写入 Issue，HTML 标记供控制器稳定提取和去重
+  ////////////////////////////////////////////////////
   return [
     `## Problem\n\n${contract.problemSummary}`,
     `## Actual behavior\n\n${contract.actualBehavior}`,

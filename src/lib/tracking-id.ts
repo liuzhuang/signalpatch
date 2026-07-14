@@ -1,3 +1,6 @@
+////////////////////////////////////////////////////
+// 只移除复制粘贴产生的首尾空白，Tracking ID 本身的字符和大小写保持不变
+////////////////////////////////////////////////////
 export function normalizeTrackingId(trackingId: string): string {
   return trackingId.trim();
 }

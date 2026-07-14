@@ -43,6 +43,9 @@ problemsUrl.searchParams.set("issue_number", `eq.${issueNumber}`);
 problemsUrl.searchParams.set("limit", "1");
 let [problem] = await requestJson(problemsUrl, { headers });
 if (!problem) {
+  ////////////////////////////////////////////////////
+  // 对话来源可能没有预建 Problem；首次记录时根据已验证 Contract 补建关联记录
+  ////////////////////////////////////////////////////
   if (!contractPath) {
     throw new Error(`Problem not found for Issue #${issueNumber}`);
   }
@@ -59,6 +62,9 @@ if (!problem) {
   });
 }
 
+////////////////////////////////////////////////////
+// 仓库、Issue、阶段、Head SHA 和尝试次数共同标识一次 Automation Run
+////////////////////////////////////////////////////
 const idempotencyKey = [
   GITHUB_REPOSITORY,
   issueNumber,
@@ -68,6 +74,10 @@ const idempotencyKey = [
 ].join(":");
 const runsUrl = new URL("/rest/v1/automation_runs", SUPABASE_URL);
 runsUrl.searchParams.set("on_conflict", "idempotency_key");
+
+////////////////////////////////////////////////////
+// 重复 Workflow 事件命中同一幂等键时更新原记录，不新增重复 Automation Run
+////////////////////////////////////////////////////
 await requestJson(runsUrl, {
   method: "POST",
   headers: {
@@ -90,6 +100,9 @@ await requestJson(runsUrl, {
 });
 const repairStatus = repairStatusForRun(stage, state);
 if (repairStatus) {
+  ////////////////////////////////////////////////////
+  // 只有状态映射明确的阶段结果才更新 Problem，失败中间态不会覆盖现有 Repair Status
+  ////////////////////////////////////////////////////
   const problemUrl = new URL("/rest/v1/problems", SUPABASE_URL);
   problemUrl.searchParams.set("id", `eq.${problem.id}`);
   await requestJson(problemUrl, {

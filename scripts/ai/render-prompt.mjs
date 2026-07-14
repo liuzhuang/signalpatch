@@ -17,6 +17,10 @@ if (!stage || (!contractPath && stage !== "intake") || !evidencePath) {
 
 const intake = stage === "intake";
 const skill = intake ? "issue-intake" : "issue-delivery";
+
+////////////////////////////////////////////////////
+// 每个阶段只加载对应 Skill 参考文件，避免把其他角色说明和历史内容带入当前模型调用
+////////////////////////////////////////////////////
 const reference = intake
   ? "evidence"
   : stage === "build"
@@ -33,6 +37,10 @@ const files = [
 ];
 
 const sections = [];
+
+////////////////////////////////////////////////////
+// 控制器按固定顺序组装可信仓库规则与不可信证据，并在首行声明信任边界
+////////////////////////////////////////////////////
 for (const [title, path] of files) {
   sections.push(`## ${title}\n\n${await readFile(path, "utf8")}`);
 }

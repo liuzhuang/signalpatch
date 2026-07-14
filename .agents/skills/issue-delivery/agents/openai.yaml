@@ -1,3 +1,5 @@
+# 仅定义 Codex Skill 选择界面的展示信息和默认入口语句；
+# Builder、Reviewer、Repair 的自动化 Prompt 由 Workflow 按阶段渲染。
 interface:
   display_name: "Issue Delivery"
   short_description: "Build, review, repair, verify, and release an Issue"

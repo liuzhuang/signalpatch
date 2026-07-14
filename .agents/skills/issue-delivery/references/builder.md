@@ -1,5 +1,10 @@
 # Builder stage
 
+<!--
+  本文件只在 --stage build 时进入 Prompt。Runner 提供 main 工作树、Issue Contract 和 Issue 快照；
+  Codex 不持外部写凭据，产出的 Diff 还要经过 allowedPaths 与风险策略校验才会发布到 AI 分支。
+-->
+
 Use a `workspace-write` sandbox with no external write credentials.
 
 1. Reproduce the actual behavior.

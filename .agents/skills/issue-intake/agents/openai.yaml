@@ -1,3 +1,5 @@
+# 仅定义 Codex Skill 选择界面的展示信息和默认入口语句；
+# 自动化运行使用 render-prompt.mjs 显式拼装 Prompt，不读取这里的 default_prompt。
 interface:
   display_name: "Issue Intake"
   short_description: "Turn sparse feedback into a verified Issue Contract"

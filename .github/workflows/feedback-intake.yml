@@ -1,18 +1,23 @@
 name: Feedback Intake
 
+# 每五分钟最多领取一条待处理 Feedback；人工触发使用同一条路径，便于立即验证。
+# GitHub cron 只保证排队，不保证精确在分钟点启动。
 on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
+# 默认 Job 只能读仓库；创建 Issue 和再次触发 Workflow 的写权限只在 publish Job 打开。
 permissions:
   contents: read
 
+# collect 会在 Supabase 中认领记录。禁止同仓库两个 Intake 并发，避免同一 Feedback 重复进入资格判断。
 concurrency:
   group: feedback-intake
   cancel-in-progress: false
 
 jobs:
+  # 持有 Supabase Service Role，只负责原子认领与脱敏；本 Job 不运行 Codex。
   collect:
     runs-on: ubuntu-latest
     outputs:
@@ -33,6 +38,7 @@ jobs:
           else
             echo "has_feedback=true" >> "$GITHUB_OUTPUT"
           fi
+      # evidence.json 是唯一交给 Codex 的输入；原始 Feedback 和服务端凭据不会进入 Artifact。
       - name: Upload redacted Intake evidence
         if: steps.scan.outputs.has_feedback == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -40,6 +46,7 @@ jobs:
           name: intake-evidence
           path: .ai/runs/intake/evidence.json
           retention-days: 1
+      # state.json 保留发布阶段所需的内部关联键，但 qualify Job 不下载它，防止模型接触数据库标识。
       - name: Upload controller state
         if: steps.scan.outputs.has_feedback == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -48,6 +55,7 @@ jobs:
           path: .ai/runs/intake/state.json
           retention-days: 1
 
+  # 无外部写凭据的自托管 Runner 负责语义判断，输出只能是 NEEDS_EVIDENCE 或 SPEC_READY Contract。
   qualify:
     needs: collect
     if: needs.collect.outputs.has_feedback == 'true'
@@ -61,12 +69,14 @@ jobs:
         with:
           name: intake-evidence
           path: .ai/runs/intake
+      # Codex CLI 的 output-schema 不解析外部 $ref，先把 Intake 包装 Schema 和 Contract Schema 合成单文件。
       - name: Build a self-contained output schema
         run: |
           node scripts/ai/bundle-schema.mjs \
             .ai/schemas/intake-output.schema.json \
             .ai/schemas/issue-contract.schema.json \
             > .ai/runs/intake/output-schema.json
+      # 渲染器把仓库规则放在前面，把脱敏 Feedback 明确标记为不可信数据，避免其中的文字变成指令。
       - name: Render untrusted input as data
         run: |
           node scripts/ai/render-prompt.mjs \
@@ -75,6 +85,7 @@ jobs:
             > .ai/runs/intake/prompt.md
       - name: Qualify Feedback with Codex
         run: |
+          # env -i 清空 Runner 继承环境，只恢复 Codex 登录与可执行文件所需的 HOME/PATH。
           env -i \
             HOME="$HOME" \
             PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
@@ -95,6 +106,7 @@ jobs:
           path: .ai/runs/intake/result.json
           retention-days: 1
 
+  # 模型退出并通过 Schema 校验后，独立 Ubuntu Job 才获得短时 GitHub App Token 和 Supabase 写凭据。
   publish:
     needs: qualify
     runs-on: ubuntu-latest
@@ -122,6 +134,7 @@ jobs:
         with:
           name: intake-state
           path: .ai/runs/intake
+      # Installation Token 只存在于本 Job，用于创建 Issue 和显式 dispatch Issue Delivery。
       - id: app-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:

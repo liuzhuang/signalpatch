@@ -17,6 +17,10 @@ const headers = {
   "accept-profile": "signalpatch",
   "content-profile": "signalpatch",
 };
+
+////////////////////////////////////////////////////
+// 超过 30 分钟仍为 PROCESSING 的 Feedback 视为中断任务，重置后允许再次领取
+////////////////////////////////////////////////////
 const staleClaims = new URL("/rest/v1/feedback", SUPABASE_URL);
 staleClaims.searchParams.set("intake_status", "eq.PROCESSING");
 staleClaims.searchParams.set(
@@ -32,6 +36,9 @@ await requestJson(staleClaims, {
   }),
 });
 
+////////////////////////////////////////////////////
+// 每次 Automation Run 只取最早的一条真实 Feedback，限制单轮处理范围
+////////////////////////////////////////////////////
 const query = new URL("/rest/v1/feedback", SUPABASE_URL);
 query.searchParams.set(
   "select",
@@ -49,6 +56,9 @@ if (!feedback) {
   process.exit(0);
 }
 
+////////////////////////////////////////////////////
+// PATCH 同时要求当前状态仍为 PENDING；返回数量为零说明已被并发任务领取
+////////////////////////////////////////////////////
 const claim = new URL("/rest/v1/feedback", SUPABASE_URL);
 claim.searchParams.set("id", `eq.${feedback.id}`);
 claim.searchParams.set("intake_status", "eq.PENDING");
@@ -64,6 +74,9 @@ if (claimed.length !== 1) {
   throw new Error("Feedback was claimed by another Automation Run");
 }
 
+////////////////////////////////////////////////////
+// 只把脱敏 Feedback 与 Feedback Context 写给 Intake Agent，数据库主键单独留给控制器
+////////////////////////////////////////////////////
 const reference = `feedback:${feedback.tracking_id}`;
 await writeFile(
   `${outputDirectory}/evidence.json`,

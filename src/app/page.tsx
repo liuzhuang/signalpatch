@@ -1,6 +1,9 @@
 import { FeedbackForm } from "@/components/feedback-form";
 import { StatusForm } from "@/components/status-form";
 
+////////////////////////////////////////////////////
+// 首页只展示自动化阶段、Feedback 提交入口和 Repair Status 查询入口，不承载管理功能
+////////////////////////////////////////////////////
 export default function Home() {
   return (
     <main>

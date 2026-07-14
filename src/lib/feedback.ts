@@ -1,5 +1,8 @@
 const MAX_MESSAGE_LENGTH = 2_000;
 
+////////////////////////////////////////////////////
+// Feedback Context 只接受定位问题所需的五个脱敏字段，其他客户端字段一律忽略
+////////////////////////////////////////////////////
 const contextKeys = [
   "feature",
   "route",
@@ -17,6 +20,9 @@ export interface FeedbackInput {
   context: FeedbackContext;
 }
 
+////////////////////////////////////////////////////
+// 在数据库调用前校验不可信输入，并去除 Feedback 正文首尾空白
+////////////////////////////////////////////////////
 export function parseFeedbackInput(value: unknown): FeedbackInput {
   if (!value || typeof value !== "object") {
     throw new Error("Feedback 请求格式有误");
@@ -37,6 +43,10 @@ export function parseFeedbackInput(value: unknown): FeedbackInput {
       ? (candidate.context as Record<string, unknown>)
       : {};
   const context: FeedbackContext = {};
+
+  ////////////////////////////////////////////////////
+  // Context 仅保留白名单中的短字符串；未知键、非字符串和超过 200 字符的值不进入存储
+  ////////////////////////////////////////////////////
   for (const key of contextKeys) {
     const contextValue = rawContext[key];
     if (typeof contextValue === "string" && contextValue.length <= 200) {

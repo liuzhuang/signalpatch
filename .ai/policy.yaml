@@ -1,5 +1,8 @@
+# 策略文件的结构版本；当前加载器直接读取 YAML，版本号用于后续兼容性判断。
 version: 1
 
+# 这里声明自动化边界，Workflow 目前用同值实现分支命名、Repair 次数和审批分流；
+# 它们不是交给 Codex 自由解释的建议，修改时必须同步检查对应 Workflow 与 Controller。
 automation:
   branch_prefix: ai/issue-
   max_repair_attempts: 3
@@ -7,19 +10,25 @@ automation:
   human_approval_risks: [R2]
   analysis_only_risks: [R3]
 
+# 名称必须与 PR Gate 暴露给 GitHub Ruleset 的检查名一致。
+# Ruleset 在 GitHub 服务端强制这些检查；本数组本身不会创建或执行检查。
 required_checks:
   - verify
   - build
   - independent-review
   - preview-smoke
 
+# validate-diff.mjs 根据实际修改路径计算最低风险，只允许在 Issue Contract 的提议上调。
+# 同一路径命中多级规则时取 R0 < R1 < R2 < R3 中最高的一级。
 risk_rules:
   R3:
+    # Secret、私钥、IAM 或认证边界只能分析，任何代码修改都应转人工处理。
     - "**/*secret*"
     - "**/*private-key*"
     - "**/iam/**"
     - "**/auth/**"
   R2:
+    # 自动化规则、Prompt、迁移和依赖会改变系统边界，允许产出 PR，但合并必须人工批准。
     - ".github/workflows/**"
     - ".agents/skills/**"
     - ".ai/**"
@@ -28,13 +37,17 @@ risk_rules:
     - "pnpm-lock.yaml"
     - "next.config.*"
   R1:
+    # 应用代码与测试属于可自动验收的局部行为变更。
     - "src/**"
     - "tests/**"
   R0:
+    # 纯文档修改不改变运行时行为；若同时命中更高等级，仍采用更高等级。
     - "README.md"
     - "docs/**"
     - "**/*.md"
 
+# R0/R1 即使把这些路径写进 allowedPaths 也会被拒绝；只有已明确分类为 R2 的 Contract
+# 才能修改这些治理文件，并继续受 r2-approval 环境保护。
 protected_paths:
   - ".github/workflows/**"
   - ".agents/skills/**"
@@ -44,12 +57,15 @@ protected_paths:
   - "pnpm-lock.yaml"
 
 codex:
+  # 这是凭据隔离清单。当前 Workflow 通过 env -i 和分离 Job 实现隔离，
+  # 并不会仅因变量写在此处就自动从进程环境删除。
   forbidden_environment_variables:
     - GH_TOKEN
     - GITHUB_TOKEN
     - SIGNALPATCH_APP_PRIVATE_KEY
     - SUPABASE_SERVICE_ROLE_KEY
     - VERCEL_TOKEN
+  # 各角色的最小文件系统权限；Workflow 调用 codex exec 时必须与这里保持一致。
   sandboxes:
     intake: read-only
     builder: workspace-write

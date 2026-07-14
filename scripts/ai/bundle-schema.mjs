@@ -10,6 +10,9 @@ if (!rootPath || !referencedPath) {
 const root = JSON.parse(await readFile(rootPath, "utf8"));
 const referenced = JSON.parse(await readFile(referencedPath, "utf8"));
 
+////////////////////////////////////////////////////
+// 递归内联与目标 $id 完全匹配的 Schema，同时移除只属于独立文档的元数据
+////////////////////////////////////////////////////
 function replace(value) {
   if (Array.isArray(value)) {
     return value.map(replace);

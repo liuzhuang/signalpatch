@@ -150,6 +150,10 @@ Repository permissions：
 
 初次配置阶段可在 Workflow 尚未产生检查名时暂缓启用 Required checks；四个检查各成功运行一次后立即收紧。
 
+Ruleset 在 GitHub 仓库服务端配置，不保存在仓库中的 YAML 文件。配置入口为 `Settings -> Rules -> Rulesets`；旧版分支保护入口为 `Settings -> Branches -> Branch protection rules`。`.github/workflows/*.yml` 只定义检查如何运行，不能解除 `main` 的保护规则。
+
+直接执行 `git push origin main` 时，Ruleset 会拒绝推送并返回 `GH013`。应将本地提交推送到非 `main` 分支，创建 Pull Request，等待四个 Required Checks 通过后再合并。不要通过强制推送绕过规则。
+
 ## 自托管 macOS Runner
 
 ### 隔离要求

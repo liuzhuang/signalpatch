@@ -1,19 +1,23 @@
 name: PR Gate
 
+# 新建、重新打开或推送新提交都会重跑 Gate；不接受手工 workflow_dispatch，确保上下文来自真实 PR 事件。
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# 默认只读。部署凭据仅在 preview-smoke 的步骤环境中出现，Reviewer Codex 所在 Job 无法继承。
 permissions:
   contents: read
   issues: read
   pull-requests: read
 
+# 同一 PR 推送新 Head 时取消旧 Gate，避免旧 SHA 的验证结果或部署继续参与验收。
 concurrency:
   group: pr-gate-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
+  # 在任何构建或 Secret 使用前验证 PR 来源，并把后续所有 Job 固定到事件中的 Head SHA。
   trust:
     runs-on: ubuntu-latest
     outputs:
@@ -35,6 +39,7 @@ jobs:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
+          # Fork PR 一律拒绝；自动分支还必须同时匹配 issue 编号格式和专用 App Bot 作者。
           [[ "$HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" ]]
           if [[ "$HEAD_REF" =~ ^ai/issue-([0-9]+)- ]] && [[ "$PR_AUTHOR" == "$APP_BOT" ]]; then
             mode=automation
@@ -42,6 +47,7 @@ jobs:
             node scripts/controllers/prepare-issue.mjs "$issue_number" .ai/runs/gate
             risk_level=$(node -e 'const c=require("./.ai/runs/gate/contract.json"); process.stdout.write(c.riskLevel)')
             echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          # 仓库所有者创建的 codex/* PR 走人工 R2 路径，不伪造自动化 Issue Contract。
           elif [[ "$HEAD_REF" =~ ^codex/ ]] && [[ "$PR_AUTHOR" == "$REPOSITORY_OWNER" ]]; then
             mode=manual
             risk_level=R2
@@ -59,6 +65,7 @@ jobs:
           path: .ai/runs/gate
           retention-days: 7
 
+  # Required Check 之一：格式、Lint、类型、单测、SQL 与 Workflow 结构校验的统一入口。
   verify:
     needs: trust
     runs-on: ubuntu-latest
@@ -78,6 +85,7 @@ jobs:
       - name: Verify
         run: pnpm verify
 
+  # Required Check 之一：独立执行生产构建，不能用 verify 成功替代可部署性证明。
   build:
     needs: trust
     runs-on: ubuntu-latest
@@ -97,6 +105,7 @@ jobs:
       - name: Build
         run: pnpm build
 
+  # 自动化 PR 才运行独立只读 Codex；它只看 Contract 和当前 Diff，不持任何外部写凭据。
   independent-review:
     needs: trust
     if: needs.trust.outputs.mode == 'automation'
@@ -115,6 +124,7 @@ jobs:
           path: .ai/runs/gate
       - name: Prepare bounded review evidence
         run: |
+          # 三点 Diff 只包含 PR 相对 main 的净变化，避免把完整 Git 历史塞进 Reviewer Prompt。
           git diff --binary origin/main...HEAD -- > .ai/runs/gate/pr.diff
           node scripts/ai/render-prompt.mjs \
             --stage review \
@@ -144,6 +154,7 @@ jobs:
           path: .ai/runs/gate/review.json
           retention-days: 7
 
+  # codex/* 手工 PR 固定按 R2 处理；environment reviewer 是真正的人工批准门，而非空跑检查。
   manual-independent-review:
     needs: trust
     if: needs.trust.outputs.mode == 'manual'
@@ -154,6 +165,7 @@ jobs:
       - name: Confirm independent R2 approval
         run: true
 
+  # 自动和手工路径共享同名 preview-smoke，但前置审查二选一；always() 让被跳过的另一分支不阻塞。
   preview-smoke:
     needs: [trust, verify, build, independent-review, manual-independent-review]
     if: >-
@@ -185,6 +197,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           mkdir -p .ai/runs/gate
+          # 使用 production 配置构建一次，但 --skip-domain 暂不接管生产域名；Outcome 成功后提升同一 Deployment。
           pnpm exec vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
           pnpm exec vercel build --prod --token="$VERCEL_TOKEN"
           deployment_url=$(pnpm exec vercel deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN")
@@ -212,6 +225,7 @@ jobs:
             --pr "${{ github.event.pull_request.number }}" \
             --preview-url "$(node -p 'require("./.ai/runs/gate/deployment.json").deploymentUrl')" \
             --contract .ai/runs/gate/contract.json
+      # Outcome 不重新构建：它下载此 Deployment URL 和 Smoke Test 产生的清理清单后执行精确提升。
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pr-${{ github.event.pull_request.number }}-deployment

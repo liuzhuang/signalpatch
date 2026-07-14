@@ -10,6 +10,10 @@ if (!contractPath || !deploymentPath || !pr || !commit || !productionUrl) {
 }
 const contract = JSON.parse(await readFile(contractPath, "utf8"));
 const deployment = JSON.parse(await readFile(deploymentPath, "utf8"));
+
+////////////////////////////////////////////////////
+// 最终评论逐条保留 Acceptance Criterion 及其 Validator，作为关闭 Issue 前的验收证据
+////////////////////////////////////////////////////
 const criteria = contract.acceptanceCriteria
   .map(
     (criterion) =>
@@ -17,6 +21,9 @@ const criteria = contract.acceptanceCriteria
   )
   .join("\n");
 
+////////////////////////////////////////////////////
+// 同一条评论汇总 PR、Commit、Preview、Production 和两次 Smoke Test 结果
+////////////////////////////////////////////////////
 process.stdout.write(`## Production acceptance passed
 
 - PR: #${pr}

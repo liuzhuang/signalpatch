@@ -23,6 +23,10 @@ if (!contractPath) {
 
 const contract = JSON.parse(await readFile(contractPath, "utf8"));
 const policy = await loadPolicy(policyPath);
+
+////////////////////////////////////////////////////
+// 只检查相对基准提交发生变化的路径，随后核对 Contract 范围、保护路径与风险等级
+////////////////////////////////////////////////////
 const output = execFileSync("git", ["diff", "--name-only", base, "--"], {
   encoding: "utf8",
 });
@@ -37,6 +41,10 @@ const violations = policyViolations(
   contract.allowedPaths,
   riskLevel,
 );
+
+////////////////////////////////////////////////////
+// 即使路径本身允许修改，实际风险高于 Contract 声明时仍拒绝继续自动执行
+////////////////////////////////////////////////////
 if (requiresRiskEscalation(contract.riskLevel, riskLevel)) {
   violations.push({
     type: "risk-escalation-required",

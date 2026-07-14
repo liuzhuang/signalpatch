@@ -26,6 +26,9 @@ const databaseHeaders = {
   "content-profile": "signalpatch",
 };
 
+////////////////////////////////////////////////////
+// 证据不足时保留 Feedback，不创建 GitHub Issue，也不启动 Delivery
+////////////////////////////////////////////////////
 if (result.status === "NEEDS_EVIDENCE") {
   const feedbackUrl = new URL("/rest/v1/feedback", SUPABASE_URL);
   feedbackUrl.searchParams.set("id", `eq.${state.feedbackId}`);
@@ -45,11 +48,19 @@ if (result.status === "NEEDS_EVIDENCE") {
 
 const contract = result.contract;
 const policy = await loadPolicy();
+
+////////////////////////////////////////////////////
+// 发布前按允许修改路径重新计算风险，模型给出的等级只能被确定性策略上调
+////////////////////////////////////////////////////
 contract.riskLevel = requiredRisk(
   policy,
   contract.allowedPaths,
   contract.riskLevel,
 );
+
+////////////////////////////////////////////////////
+// Issue 同时包含可读问题摘要和完整 Issue Contract，Delivery 以后者为执行依据
+////////////////////////////////////////////////////
 const issueBody = [
   `## Problem\n\n${contract.problemSummary}`,
   `## Actual behavior\n\n${contract.actualBehavior}`,
@@ -79,6 +90,9 @@ const issue = await requestJson(
   },
 );
 
+////////////////////////////////////////////////////
+// Issue 创建成功后才建立 Problem，并把原始 Feedback 关联到该 Problem
+////////////////////////////////////////////////////
 const [problem] = await requestJson(
   new URL("/rest/v1/problems", SUPABASE_URL),
   {
@@ -104,6 +118,10 @@ await requestJson(feedbackUrl, {
     processed_at: new Date().toISOString(),
   }),
 });
+
+////////////////////////////////////////////////////
+// 使用显式 workflow_dispatch 启动 Delivery，不依赖 GitHub Token 写入产生隐式事件
+////////////////////////////////////////////////////
 await requestJson(
   `https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/issue-delivery.yml/dispatches`,
   {

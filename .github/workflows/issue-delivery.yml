@@ -1,5 +1,7 @@
 name: Issue Delivery
 
+# 对话来源依靠 issues.opened 自动进入；Feedback 来源由 Intake publish 显式 dispatch。
+# 两种事件都先经过 prepare，不会直接把未经校验的 Issue Body 交给 Codex。
 on:
   issues:
     types: [opened]
@@ -10,15 +12,18 @@ on:
         required: true
         type: string
 
+# Workflow 默认只有读取 Issue Contract 的权限；分支、PR、评论写权限按发布 Job 单独授予。
 permissions:
   contents: read
   issues: read
 
+# 同一个 Issue 的重复 opened/dispatch 事件串行执行，避免并发创建两个 AI 分支或 PR。
 concurrency:
   group: issue-delivery-${{ inputs.issue_number || github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
+  # 在 GitHub 托管 Runner 中提取 signalpatch-contract 标记块、校验来源并确定风险，不运行 Codex。
   prepare:
     runs-on: ubuntu-latest
     outputs:
@@ -46,6 +51,7 @@ jobs:
           node scripts/controllers/prepare-issue.mjs "$ISSUE_NUMBER" .ai/runs/delivery
           source_kind=$(node -e 'const c=require("./.ai/runs/delivery/contract.json"); process.stdout.write(c.source.kind)')
           proceed=true
+          # Feedback 创建 Issue 时还会产生 issues.opened；真正构建只由 Intake 的显式 dispatch 负责，防止双跑。
           if [[ "$TRIGGER" == "issues" && "$source_kind" == "feedback" ]]; then
             proceed=false
           fi
@@ -64,6 +70,7 @@ jobs:
           path: .ai/runs/delivery
           retention-days: 7
 
+  # R0-R2 在无外部写凭据的自托管 Runner 修改工作树；R3 永远不会进入此 Job。
   build:
     needs: prepare
     if: needs.prepare.outputs.proceed == 'true' && needs.prepare.outputs.risk_level != 'R3'
@@ -89,6 +96,7 @@ jobs:
             > .ai/runs/delivery/prompt.md
       - name: Build with Codex
         run: |
+          # Builder 只保留本地登录和工具路径，workspace-write 允许改仓库但不能访问 GitHub 或部署凭据。
           env -i \
             HOME="$HOME" \
             PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
@@ -100,6 +108,7 @@ jobs:
             - < .ai/runs/delivery/prompt.md
       - name: Enforce paths and risk
         run: |
+          # intent-to-add 让新文件出现在 git diff 中，避免新增文件绕过 allowedPaths 和风险校验。
           git add --intent-to-add -- .
           node scripts/ai/validate-json.mjs \
             .ai/schemas/delivery-output.schema.json \
@@ -117,6 +126,7 @@ jobs:
             .ai/runs/delivery/result.json
           retention-days: 7
 
+  # R3 只生成结构化分析，不产生 Patch；复用 Reviewer 的只读阶段规则。
   analyze-r3:
     needs: prepare
     if: needs.prepare.outputs.proceed == 'true' && needs.prepare.outputs.risk_level == 'R3'
@@ -160,6 +170,7 @@ jobs:
           path: .ai/runs/delivery/r3-analysis.json
           retention-days: 7
 
+  # 分析完成后才在隔离 Job 获取 App Token，把结论写回 Issue 并转为人工处理。
   publish-r3:
     needs: [prepare, analyze-r3]
     runs-on: ubuntu-latest
@@ -185,6 +196,7 @@ jobs:
             --remove-label "ai:ready" \
             --add-label "ai:human-required"
 
+  # Controller 在干净 main 上应用已验证 Patch，再次校验后才提交、推送并创建 Draft PR。
   publish:
     needs: [prepare, build]
     runs-on: ubuntu-latest
@@ -229,6 +241,7 @@ jobs:
           branch="ai/issue-${ISSUE_NUMBER}-delivery"
           git checkout -b "$branch"
           git apply --index .ai/runs/delivery/change.patch
+          # Artifact 跨越了 Job 信任边界，发布前必须针对即将提交的工作树重新执行同一策略检查。
           node scripts/ai/validate-diff.mjs \
             --base HEAD \
             --contract .ai/runs/delivery/contract.json

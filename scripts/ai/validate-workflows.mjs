@@ -16,6 +16,9 @@ const files = (await readdir(directory)).filter((file) =>
 );
 const errors = [];
 
+////////////////////////////////////////////////////
+// 四个固定 Workflow 缺一不可，额外 Workflow 也必须接受同一组安全校验
+////////////////////////////////////////////////////
 for (const name of expected) {
   if (!files.includes(name)) {
     errors.push(`${name}: missing workflow`);
@@ -40,6 +43,10 @@ for (const file of files) {
   if (file !== "pr-outcome.yml" && source.includes("workflow_run:")) {
     errors.push(`${file}: workflow_run is only allowed in pr-outcome.yml`);
   }
+
+  ////////////////////////////////////////////////////
+  // Codex Job 不得接触写入凭据，并且检出代码时必须关闭凭据持久化
+  ////////////////////////////////////////////////////
   for (const [jobName, job] of Object.entries(workflow.jobs)) {
     const jobSource = JSON.stringify(job);
     const codexJob = jobSource.includes("codex exec");
@@ -80,6 +87,10 @@ for (const file of files) {
         `${file}:${jobName}: deployment credentials and Codex share a job`,
       );
     }
+
+    ////////////////////////////////////////////////////
+    // 外部 Action 必须固定到完整 Commit SHA，防止标签移动后执行未经审查的代码
+    ////////////////////////////////////////////////////
     for (const step of job.steps ?? []) {
       if (
         step.uses &&

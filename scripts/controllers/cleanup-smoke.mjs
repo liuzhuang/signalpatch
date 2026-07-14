@@ -22,6 +22,9 @@ const headers = {
   "content-profile": "signalpatch",
 };
 
+////////////////////////////////////////////////////
+// 只按 Smoke Test 记录的 Tracking ID 清理数据，避免对业务 Feedback 做范围删除
+////////////////////////////////////////////////////
 for (const trackingId of trackingIds) {
   const url = new URL("/rest/v1/feedback", SUPABASE_URL);
   url.searchParams.set("tracking_id", `eq.${trackingId}`);
@@ -30,6 +33,10 @@ for (const trackingId of trackingIds) {
     headers,
     body: JSON.stringify({ synthetic: true }),
   });
+
+  ////////////////////////////////////////////////////
+  // 先再次标记为合成数据，再对同一个精确过滤条件执行删除
+  ////////////////////////////////////////////////////
   await requestJson(url, { method: "DELETE", headers });
 }
 process.stdout.write(`${JSON.stringify({ deleted: trackingIds.length })}\n`);

@@ -10,6 +10,10 @@ const changedFiles = Number(changedValue);
 
 let allowed = true;
 let reason = "repair-allowed";
+
+////////////////////////////////////////////////////
+// 依次阻止越界尝试、重复失败和无有效修改，保证自动 Repair 最多执行三轮
+////////////////////////////////////////////////////
 if (!Number.isInteger(attempt) || attempt < 1 || attempt > 3) {
   allowed = false;
   reason = "repair-attempt-out-of-range";

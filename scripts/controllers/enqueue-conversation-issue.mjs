@@ -21,12 +21,19 @@ const request = newConversationRequest(contract);
 const destination = join(pendingDirectory, `${request.requestId}.json`);
 const temporary = `${destination}.tmp`;
 
+////////////////////////////////////////////////////
+// Codex 只写本地待发布队列，不读取外部凭据，也不直接调用 GitHub API
+////////////////////////////////////////////////////
 await mkdir(dirname(destination), { recursive: true, mode: 0o750 });
 await writeFile(temporary, `${JSON.stringify(request, null, 2)}\n`, {
   encoding: "utf8",
   mode: 0o640,
   flag: "wx",
 });
+
+////////////////////////////////////////////////////
+// 临时文件完整写入后再原子重命名，防止发布器读到半份 JSON
+////////////////////////////////////////////////////
 await rename(temporary, destination);
 process.stdout.write(
   `${JSON.stringify({ requestId: request.requestId, state: "QUEUED" })}\n`,

@@ -2,6 +2,9 @@
 
 import { useState, type FormEvent } from "react";
 
+////////////////////////////////////////////////////
+// 查询结果对应公开 Repair Status，不包含 Feedback、Problem 或内部数据库 ID
+////////////////////////////////////////////////////
 interface StatusResult {
   trackingId: string;
   repairStatus: string;
@@ -14,6 +17,9 @@ export function StatusForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  ////////////////////////////////////////////////////
+  // Tracking ID 作为路径参数编码，首尾空白由服务端统一规范化后再查询
+  ////////////////////////////////////////////////////
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
@@ -28,6 +34,10 @@ export function StatusForm() {
       if (!response.ok) {
         throw new Error(body.error ?? "Repair Status 查询失败");
       }
+
+      ////////////////////////////////////////////////////
+      // 每次只展示本次查询结果；新查询开始时已清除旧结果和旧错误
+      ////////////////////////////////////////////////////
       setResult(body);
     } catch (lookupError) {
       setError(

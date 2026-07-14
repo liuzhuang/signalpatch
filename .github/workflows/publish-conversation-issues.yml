@@ -1,19 +1,23 @@
 name: Publish Conversation Issues
 
+# Codex 对话入口只把已确认 Contract 写入本地队列；此 Workflow 定时或手动把队列发布为 GitHub Issue。
 on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
+# 仓库内容只读，Issue 写权限仅供最终发布；Codex 不在这条 Workflow 中运行。
 permissions:
   contents: read
   issues: write
 
+# 队列目录由自托管 Runner 共享，单发布器可避免两个进程同时领取同一请求。
 concurrency:
   group: conversation-issue-publisher
   cancel-in-progress: false
 
 jobs:
+  # 必须落到 signalpatch 自托管 Runner，才能看到 enqueue-conversation-issue.mjs 写入的本地队列。
   publish:
     runs-on: [self-hosted, macOS, ARM64, signalpatch]
     steps:
@@ -28,6 +32,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Controller 会重新校验 Contract、按 request UUID 防重，然后才使用短时 App Token 创建 Issue。
       - id: app-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:

@@ -1,5 +1,10 @@
 # Reviewer stage
 
+<!--
+  本文件用于两条只读路径：PR Gate 的独立审查，以及 R3 Issue 的分析。
+  PR Gate 传入当前 PR Diff；verify、build 和 Smoke Test 由独立 Job 执行，不靠 Reviewer 代跑。
+-->
+
 Use a `read-only` sandbox and an independent Codex session.
 
 Check the Issue Contract, current PR diff, verification summary, and acceptance evidence. Report only evidence-backed findings.

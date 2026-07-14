@@ -1,3 +1,8 @@
+<!--
+  scripts/ai/render-prompt.mjs 会把本文件作为 Repository guidance 放在每次 Intake、Builder、
+  Reviewer 和 Repair Prompt 的最前面；这里定义跨阶段硬约束，阶段细节留在对应 Skill reference。
+-->
+
 # SignalPatch agent guide
 
 ## Domain language
