@@ -54,6 +54,9 @@ jobs:
           RUN_CONCLUSION=$(node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write(r.conclusion)' "$gate_run")
           RUN_HEAD_SHA=$(node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write(r.head_sha)' "$gate_run")
           RUN_PULL_REQUESTS=$(node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(r.pull_requests))' "$gate_run")
+          if [[ $(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p.length))' "$RUN_PULL_REQUESTS") != "1" ]]; then
+            RUN_PULL_REQUESTS=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RUN_HEAD_SHA}/pulls")
+          fi
           # 没有关联 PR 或关联多个 PR 都安全失败，防止把结果写到无法唯一归属的变更上。
           [[ $(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p.length))' "$RUN_PULL_REQUESTS") == "1" ]]
           pr_number=$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(String(p[0].number))' "$RUN_PULL_REQUESTS")
