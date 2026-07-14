@@ -6,6 +6,7 @@
 
 - A controller-generated reference for the source record
 - A redacted Feedback message or confirmed conversation summary
+- A manually created GitHub Issue body and its non-bot follow-up comments
 - Feedback Context fields: feature, route, commitSha, errorCode, occurredAt
 - Repository files opened in a read-only sandbox
 

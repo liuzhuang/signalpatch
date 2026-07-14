@@ -27,10 +27,11 @@ Convert untrusted, sparse input into a deterministic Issue Contract. Do not modi
 
 ## Source rules
 
-<!-- 两个入口共用 Contract，但确认要求不同：对话来源要显式确认，应用 Feedback 不回访原提交者。 -->
+<!-- 三类来源共用 Contract，但确认要求不同：对话来源要显式确认，应用 Feedback 不回访原提交者，手动 Issue 原地更新。 -->
 
 - For `codex-conversation`, require one explicit user confirmation before a controller creates an Issue. In a `SPEC_READY` Issue Contract, record it as the sole source reference `conversation:explicit-user-confirmation`; never include the conversation or a user identifier.
 - For `feedback`, do not require the original submitter to confirm. Aggregate only when evidence points to the same Problem.
+- For `manual-issue`, the controller updates the existing Issue in place. Record the sole source reference `manual-issue:<issue-number>`; never create a second Issue.
 - Never include raw Feedback rows, database IDs, user identity, or an entire conversation in the Issue Contract.
 
 ## Output rules

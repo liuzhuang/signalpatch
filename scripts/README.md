@@ -68,12 +68,14 @@ flowchart TD
 | [`classify-failure.mjs`](ai/classify-failure.mjs)       | CLI    | 将失败日志分为 `infrastructure`（Runner/网络等）或 `application`（业务/测试失败）                                  |
 | [`lib/policy.mjs`](ai/lib/policy.mjs)                   | **库** | 加载 policy YAML；glob 转正则；`requiredRisk`、`policyViolations`、`matchesAny`                                    |
 
-### 2.3 `scripts/controllers/`（9 个 CLI + 3 个库）
+### 2.3 `scripts/controllers/`（11 个 CLI + 3 个库）
 
 | 文件                                                                             | 类型   | 作用                                                                                                          |
 | -------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
 | [`intake-collect.mjs`](controllers/intake-collect.mjs)                           | CLI    | 从 Supabase 原子认领一条 `PENDING` Feedback；写出脱敏 `evidence.json` 与控制器 `state.json`                   |
 | [`intake-publish.mjs`](controllers/intake-publish.mjs)                           | CLI    | 创建 raw Issue；`NEEDS_EVIDENCE` 保留 raw 并评论缺少上下文，`SPEC_READY` 原地晋升 processed；重复时评论并关闭 |
+| [`manual-issue-intake-collect.mjs`](controllers/manual-issue-intake-collect.mjs) | CLI    | 读取已有 `content:raw` Issue 的正文与非机器人评论，不创建 Issue                                               |
+| [`manual-issue-intake-publish.mjs`](controllers/manual-issue-intake-publish.mjs) | CLI    | 将 Manual Issue Intake 结果评论或写回原 Issue，并原地晋升 processed                                           |
 | [`prepare-issue.mjs`](controllers/prepare-issue.mjs)                             | CLI    | 从 processed GitHub Issue 提取 `signalpatch-contract` 标记块；写出 `contract.json` 与最小 `issue.json`        |
 | [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)   | CLI    | 校验已确认 Contract；`gh` 有权限时直接发布，否则原子写入本地 `pending/` 队列（`.tmp` → rename）               |
 | [`publish-conversation-issues.mjs`](controllers/publish-conversation-issues.mjs) | CLI    | 消费本地队列：校验 Request、创建 raw Issue、精确去重并晋升 processed                                          |

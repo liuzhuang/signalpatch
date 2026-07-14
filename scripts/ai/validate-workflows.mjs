@@ -9,6 +9,7 @@ import { parse } from "yaml";
 const directory = ".github/workflows";
 const expected = [
   "feedback-intake.yml",
+  "manual-issue-intake.yml",
   "issue-delivery.yml",
   "pr-gate.yml",
   "pr-outcome.yml",
@@ -19,7 +20,7 @@ const files = (await readdir(directory)).filter((file) =>
 const errors = [];
 
 ////////////////////////////////////////////////////
-// 四个固定 Workflow 缺一不可，额外 Workflow 也必须接受同一组安全校验
+// Intake、Delivery、Gate 和 Outcome 的固定 Workflow 缺一不可，额外 Workflow 也必须接受同一组安全校验
 ////////////////////////////////////////////////////
 for (const name of expected) {
   if (!files.includes(name)) {

@@ -186,6 +186,23 @@ export async function findIssueByMarker(repository, token, marker) {
   return findMarkedIssue(await listAll(repository, token, "issues"), marker);
 }
 
+export async function updateIssue({
+  repository,
+  token,
+  issueNumber,
+  body,
+  labels,
+}) {
+  return requestJson(
+    `https://api.github.com/repos/${repository}/issues/${issueNumber}`,
+    {
+      method: "PATCH",
+      headers: headers(token),
+      body: JSON.stringify({ body, labels }),
+    },
+  );
+}
+
 export async function ensureIssueComment({
   repository,
   token,
