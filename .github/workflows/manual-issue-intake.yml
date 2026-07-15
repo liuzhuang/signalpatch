@@ -1,10 +1,12 @@
 name: Manual Issue Intake
 
-# 【做什么】定时评估已有 content:raw Issue，并原地评论或晋升
-# 【何时跑】每 5 分钟；workflow_dispatch 可指定一个 Issue 立即处理
+# 【做什么】评估用户创建或补充的手工 Issue，并原地评论或晋升
+# 【何时跑】Issue 创建/编辑/标记、用户评论创建/编辑/删除；workflow_dispatch 仅用于运维补跑
 on:
-  schedule:
-    - cron: "*/5 * * * *"
+  issues:
+    types: [opened, edited, labeled, reopened]
+  issue_comment:
+    types: [created, edited, deleted]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -16,11 +18,80 @@ permissions:
   contents: read
 
 concurrency:
-  group: manual-issue-intake
+  # 同一 Issue 的真实上下文事件串行；Bot 评论和非 raw 标签 Run 使用 run_id，不能替换有效 pending Run。
+  group: >-
+    manual-issue-intake-${{
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'issues' &&
+          (
+            (github.event.sender.type != 'Bot' && (github.event.action != 'labeled' || github.event.label.name == 'content:raw')) ||
+            (github.event.action == 'labeled' && github.event.label.name == 'content:raw' && contains(github.event.issue.labels.*.name, 'source:manual'))
+          )
+        ) ||
+        (github.event_name == 'issue_comment' && github.event.sender.type != 'Bot' && github.event.comment.user.type != 'Bot')
+      ) &&
+      (inputs.issue_number || github.event.issue.number || 'scan') ||
+      github.run_id
+    }}
   cancel-in-progress: false
 
 jobs:
   collect:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'issues' &&
+        github.event.issue.state == 'open' &&
+        github.event.issue.pull_request == null &&
+        (
+          github.event.sender.type != 'Bot' ||
+          (
+            github.event.action == 'labeled' &&
+            github.event.label.name == 'content:raw' &&
+            contains(github.event.issue.labels.*.name, 'source:manual')
+          )
+        ) &&
+        github.event.issue.user.type != 'Bot' &&
+        !contains(github.event.issue.labels.*.name, 'duplicate') &&
+        !contains(github.event.issue.body, '<!-- signalpatch-feedback:') &&
+        !contains(github.event.issue.body, '<!-- signalpatch-conversation-request:') &&
+        (
+          (
+            !contains(github.event.issue.labels.*.name, 'content:processed') &&
+            !contains(github.event.issue.body, '<!-- signalpatch-contract:start -->')
+          ) ||
+          (
+            contains(github.event.issue.labels.*.name, 'content:processed') &&
+            contains(github.event.issue.labels.*.name, 'ai:ready') &&
+            contains(github.event.issue.labels.*.name, 'source:manual')
+          )
+        ) &&
+        (github.event.action != 'labeled' || github.event.label.name == 'content:raw')
+      ) ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.state == 'open' &&
+        github.event.issue.pull_request == null &&
+        github.event.sender.type != 'Bot' &&
+        github.event.issue.user.type != 'Bot' &&
+        github.event.comment.user.type != 'Bot' &&
+        !contains(github.event.issue.labels.*.name, 'duplicate') &&
+        !contains(github.event.issue.body, '<!-- signalpatch-feedback:') &&
+        !contains(github.event.issue.body, '<!-- signalpatch-conversation-request:') &&
+        (
+          (
+            !contains(github.event.issue.labels.*.name, 'content:processed') &&
+            !contains(github.event.issue.body, '<!-- signalpatch-contract:start -->')
+          ) ||
+          (
+            contains(github.event.issue.labels.*.name, 'content:processed') &&
+            contains(github.event.issue.labels.*.name, 'ai:ready') &&
+            contains(github.event.issue.labels.*.name, 'source:manual')
+          )
+        )
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,13 +111,15 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - id: scan
-        name: Select an existing raw Issue
+        name: Load the triggering raw Issue
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          SIGNALPATCH_APP_BOT: ${{ vars.SIGNALPATCH_APP_BOT }}
+          SIGNALPATCH_EVENT_ACTION: ${{ github.event.action }}
         run: |
           node scripts/controllers/manual-issue-intake-collect.mjs \
-            "${{ inputs.issue_number || '' }}" \
+            "${{ inputs.issue_number || github.event.issue.number || '' }}" \
             .ai/runs/manual-issue-intake
           if [[ -f .ai/runs/manual-issue-intake/empty ]]; then
             echo "has_issue=false" >> "$GITHUB_OUTPUT"
@@ -149,6 +222,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          SIGNALPATCH_APP_BOT: ${{ vars.SIGNALPATCH_APP_BOT }}
         run: |
           node scripts/controllers/manual-issue-intake-publish.mjs \
             .ai/runs/manual-issue-intake/result.json \

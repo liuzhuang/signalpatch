@@ -22,9 +22,6 @@ jobs:
   # 必须落到 signalpatch 自托管 Runner，才能读到 ~/.signalpatch/conversation-issue-queue（或 SIGNALPATCH_CONVERSATION_QUEUE）。
   publish:
     runs-on: [self-hosted, macOS, ARM64, signalpatch]
-    concurrency:
-      group: issue-publisher
-      cancel-in-progress: false
     steps:
       # 检出 controller 脚本、Schema 与 policy；Codex enqueue 不在此 Workflow 内执行。
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -50,4 +47,5 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          SIGNALPATCH_APP_BOT: ${{ vars.SIGNALPATCH_APP_BOT }}
         run: node scripts/controllers/publish-conversation-issues.mjs

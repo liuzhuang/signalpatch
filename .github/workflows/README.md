@@ -47,12 +47,12 @@ flowchart LR
   I --> J
 ```
 
-| 阶段      | 对应文件                                                                              | 用人话说                                                                                                                            |
-| --------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 1. 收需求 | `feedback-intake.yml`、`publish-conversation-issues.yml` 或 `manual-issue-intake.yml` | 前两者创建 `content:raw` Issue；手动入口扫描已有 `content:raw` Issue；信息不足时在原 Issue 评论，足够时原地晋升 `content:processed` |
-| 2. 写代码 | `issue-delivery.yml`                                                                  | 让 Codex **改仓库代码**，推一个分支，**开 Draft PR**                                                                                |
-| 3. 验 PR  | `pr-gate.yml`                                                                         | 跑测试、构建、AI 审查、部署预览环境并做 Smoke Test；检查结果供自动化验收，不是仓库合并门禁                                          |
-| 4. 收尾   | `pr-outcome.yml`                                                                      | Gate **过了**就合并 PR、上生产；Gate **挂了**就尝试自动修代码（最多 3 次），还不行就转人工                                          |
+| 阶段      | 对应文件                                                                              | 用人话说                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1. 收需求 | `feedback-intake.yml`、`publish-conversation-issues.yml` 或 `manual-issue-intake.yml` | 前两者创建 `content:raw` Issue；手动入口监听当前 Issue 和用户评论；信息不足时在原 Issue 评论，足够时原地晋升 `content:processed` |
+| 2. 写代码 | `issue-delivery.yml`                                                                  | 让 Codex **改仓库代码**，推一个分支，**开 Draft PR**                                                                             |
+| 3. 验 PR  | `pr-gate.yml`                                                                         | 跑测试、构建、AI 审查、部署预览环境并做 Smoke Test；检查结果供自动化验收，不是仓库合并门禁                                       |
+| 4. 收尾   | `pr-outcome.yml`                                                                      | Gate **过了**就合并 PR、上生产；Gate **挂了**就尝试自动修代码（最多 3 次），还不行就转人工                                       |
 
 **Issue Contract** 是什么？  
 Problem 达到自动开发条件后写入 GitHub Issue 的**结构化 JSON 契约**（来源、证据、验收标准、允许修改路径、风险等级等）。后续 Delivery / Gate / Repair **只认** `signalpatch-contract` 标记块里的 JSON，不认 Issue 其它自由文字。详见 [feedback-intake.yml.md § Issue Contract](feedback-intake.yml.md#issue-contract-是什么)。
@@ -109,10 +109,14 @@ Supabase → collect → qualify → publish → GitHub Issue → issue-delivery
 
 ### `manual-issue-intake.yml` — 手动 Issue → 原地补充或晋升
 
-**一句话**：每 5 分钟扫描最早的 `content:raw` Issue；信息不足就在原 Issue 评论，信息足够就在原 Issue 写入 Contract 并改为 `content:processed`，不创建新 Issue。
+**一句话**：手工 `content:raw` Issue 创建、编辑或收到用户评论时立即评估；产品方向明确时由 Intake 自行补齐合理默认值，并由 App Bot 把 Contract 写入专用评论后改为 `content:processed`，不创建新 Issue。
 
 - 用户可以只提交一句话，例如“增加关于我们页面”。
-- 用户补充的非机器人评论会随下一轮定时扫描一起作为上下文。
+- 用户创建、编辑或删除评论后，Workflow 会重新读取当前正文和全部非机器人评论。
+- App Bot 的 Contract 评论保存本轮上下文指纹；Issue 作者不能编辑这条可信评论。资格判断期间或 `ai:ready` 阶段出现新上下文时，旧版本不会进入 Builder，由最新事件重新评估。
+- 只有输入不是产品意见、与当前产品无关或没有可识别的产品结果时才要求补充上下文；实现机制、元素范围、断点和 Validator 默认由 Intake 根据仓库补齐。
+- `ai:building` 是本轮上下文截止点；此后评论用于交付讨论，不自动重启 Intake。
+- Feedback、Codex 对话、机器人评论、PR 评论、关闭和重复 Issue 不进入 Manual Intake。
 - 达到 `SPEC_READY` 后，`content:processed` 标签事件才会启动 `issue-delivery.yml`。
 - 也可以通过 `workflow_dispatch` 指定 Issue 编号立即处理。
 
@@ -149,7 +153,7 @@ Supabase → collect → qualify → publish → GitHub Issue → issue-delivery
 | 项目            | 说明                                                                                                                                                                |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **什么时候跑**  | Issue 被添加 `content:processed` 标签；`workflow_dispatch` 仅用于运维补跑                                                                                           |
-| **从哪来**      | 已有 GitHub Issue + 正文中的 Issue Contract                                                                                                                         |
+| **从哪来**      | 已有 GitHub Issue；Feedback/Codex Contract 位于可信发布者写入的正文，Manual Contract 位于 App Bot 专用评论                                                          |
 | **产出什么**    | 分支 `ai/issue-{编号}-delivery` + **Draft PR**（非 Ready PR；见 [详述 § Draft PR](issue-delivery.yml.md#draft-pr-与普通-pr-的区别)）；PR 创建后会触发 `pr-gate.yml` |
 | **特殊情况 R3** | 风险太高 → **不改代码**，Issue 评论 + 转 `ai:human-required`                                                                                                        |
 | **详细文档**    | [issue-delivery.yml.md](issue-delivery.yml.md)（5 Job、proceed 防双跑、prepare/record-run/validate-diff 脚本详述）                                                  |
@@ -253,7 +257,7 @@ PR Gate completed (workflow_run)
 
 ---
 
-## 两条入口对照（避免搞混）
+## 三种入口对照（避免搞混）
 
 ```mermaid
 sequenceDiagram
@@ -263,6 +267,8 @@ sequenceDiagram
   participant Codex as Codex对话
   participant PQ as 本地队列
   participant PC as publish-conversation-issues
+  participant Manual as GitHub手工Issue
+  participant MI as manual-issue-intake
   participant GH as GitHub Issue
   participant ID as issue-delivery
 
@@ -275,7 +281,14 @@ sequenceDiagram
   PQ->>PC: 定时发布
   PC->>GH: 创建 Issue
   PC->>ID: content:processed 标签事件
+
+  Manual->>GH: 创建或补充 content:raw Issue
+  GH->>MI: issues / issue_comment 事件
+  MI->>GH: 原地写入 Contract
+  MI->>ID: content:processed 标签事件
 ```
+
+Feedback 与 Codex 对话入口按 Problem 指纹选择编号最小的已验证 Issue 作为 canonical。去重检查同时覆盖 `content:processed` 和尚未晋升的系统 `content:raw` Issue，两个入口并发提交同一 Problem 时也只会启动一个 Delivery。
 
 ---
 
@@ -304,7 +317,7 @@ sequenceDiagram
 | 文件                              | Workflow 名称               | 触发                           | Jobs                                        | PR 检查                                          |
 | --------------------------------- | --------------------------- | ------------------------------ | ------------------------------------------- | ------------------------------------------------ |
 | `feedback-intake.yml`             | Feedback Intake             | cron + 手动                    | collect → qualify → publish                 | 无                                               |
-| `manual-issue-intake.yml`         | Manual Issue Intake         | cron + 手动                    | collect → qualify → publish                 | 无                                               |
+| `manual-issue-intake.yml`         | Manual Issue Intake         | Issue/用户评论事件 + 手动      | collect → qualify → publish                 | 无                                               |
 | `publish-conversation-issues.yml` | Publish Conversation Issues | cron + 手动                    | publish                                     | 无                                               |
 | `issue-delivery.yml`              | Issue Delivery              | issues.labeled + 补跑 dispatch | prepare → build/analyze-r3 → publish*       | 无                                               |
 | `pr-gate.yml`                     | PR Gate                     | PR 打开/同步/重开              | trust → verify/build/review → preview-smoke | verify, build, independent-review, preview-smoke |

@@ -195,15 +195,16 @@ flowchart TD
   Q -->|失败| S[回滚并标记 ai:human-required]
 ```
 
-五个 Workflow 的职责固定如下：
+六个 Workflow 的职责固定如下：
 
-| Workflow                      | 触发方式                          | 主要职责                                                                |
-| ----------------------------- | --------------------------------- | ----------------------------------------------------------------------- |
-| `Feedback Intake`             | 每 5 分钟或 `workflow_dispatch`   | 领取 Feedback，创建 raw Issue，资格通过后原地晋升为 processed Issue     |
-| `Publish Conversation Issues` | 每 5 分钟或 `workflow_dispatch`   | 发布 Codex 本地队列，创建与 Feedback 入口相同生命周期的 Issue           |
-| `Issue Delivery`              | `issues.labeled` 或补跑 dispatch  | 只读取 processed Issue Contract，运行 Builder 或 R3 分析，创建 Draft PR |
-| `PR Gate`                     | PR opened、synchronize、reopened  | 验证、构建、独立审查、Preview Smoke Test                                |
-| `PR Outcome`                  | `PR Gate` 完成后经 `workflow_run` | 失败分类与有界 Repair，或合并、发布、Production Smoke Test              |
+| Workflow                      | 触发方式                                 | 主要职责                                                                |
+| ----------------------------- | ---------------------------------------- | ----------------------------------------------------------------------- |
+| `Feedback Intake`             | 每 5 分钟或 `workflow_dispatch`          | 领取 Feedback，创建 raw Issue，资格通过后原地晋升为 processed Issue     |
+| `Publish Conversation Issues` | 每 5 分钟或 `workflow_dispatch`          | 发布 Codex 本地队列，创建与 Feedback 入口相同生命周期的 Issue           |
+| `Manual Issue Intake`         | Issue/用户评论事件或 `workflow_dispatch` | 读取手工 raw Issue；App Bot 评论保存 Contract，原地晋升 processed Issue |
+| `Issue Delivery`              | `issues.labeled` 或补跑 dispatch         | 只读取 processed Issue Contract，运行 Builder 或 R3 分析，创建 Draft PR |
+| `PR Gate`                     | PR opened、synchronize、reopened         | 验证、构建、独立审查、Preview Smoke Test                                |
+| `PR Outcome`                  | `PR Gate` 完成后经 `workflow_run`        | 失败分类与有界 Repair，或合并、发布、Production Smoke Test              |
 
 ### 1. 术语和状态
 
@@ -714,11 +715,11 @@ on:
         required: true
 ```
 
-- `issues.labeled`：Issue 被添加 `content:processed` 标签后自动启动；手动创建的有效 Contract Issue 也走这条路径。
+- `issues.labeled`：打开的非重复 Issue 被添加 `content:processed`，且同时处于 `ai:ready` 时自动启动。
 - `workflow_dispatch`：仅用于运维补跑，显式传入 `issue_number`。
-- 并发组按 Issue number 隔离，同一个 Issue 不并行执行两次 Delivery。
+- processed 事件和补跑按 Issue number 隔离；其他标签事件使用独立 Run，不能替换待执行的 processed 事件。
 
-Issue Delivery 不监听普通 `issues.opened`，也不接收 `content:raw` Issue。自动入口完成统一去重和 raw → processed 晋升后，由 `content:processed` 标签事件启动一次 Delivery；手动 Issue 必须包含有效 Contract 并添加该标签。
+Issue Delivery 不监听普通 `issues.opened`，也不接收 `content:raw` Issue。自动入口完成统一去重和 raw → processed 晋升后，由 `content:processed` 标签事件启动一次 Delivery；手动 Issue 必须存在配置的 App Bot 写入的有效 Contract 评论，并且上下文修订指纹与当前正文和用户评论一致。认领阶段还会比对 prepare 的 Contract digest；旧修订只会安全空跑，不会启动 Builder。
 
 #### Job 和作用
 

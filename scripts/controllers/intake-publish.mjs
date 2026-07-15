@@ -18,13 +18,19 @@ if (!resultPath || !statePath) {
     "Usage: intake-publish.mjs <intake-result.json> <state.json>",
   );
 }
-const { GH_TOKEN, GITHUB_REPOSITORY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } =
-  requireEnvironment([
-    "GH_TOKEN",
-    "GITHUB_REPOSITORY",
-    "SUPABASE_URL",
-    "SUPABASE_SERVICE_ROLE_KEY",
-  ]);
+const {
+  GH_TOKEN,
+  GITHUB_REPOSITORY,
+  SIGNALPATCH_APP_BOT,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
+} = requireEnvironment([
+  "GH_TOKEN",
+  "GITHUB_REPOSITORY",
+  "SIGNALPATCH_APP_BOT",
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+]);
 const { result } = JSON.parse(await readFile(resultPath, "utf8"));
 const state = JSON.parse(await readFile(statePath, "utf8"));
 const databaseHeaders = {
@@ -89,12 +95,14 @@ if (result.status === "NEEDS_EVIDENCE") {
       "_This Issue contains a redacted Intake result. The original Feedback remains in Supabase._",
     ].join("\n\n"),
     labels: issueLabels.raw("ai:needs-input"),
+    trustedBotLogin: SIGNALPATCH_APP_BOT,
   });
   await ensureIssueComment({
     repository: GITHUB_REPOSITORY,
     token: GH_TOKEN,
     issueNumber: issue.number,
     marker: missingEvidenceCommentMarker,
+    trustedBotLogin: SIGNALPATCH_APP_BOT,
     body: [
       "## 需要补充上下文",
       "目前提供的信息不足，暂时无法生成可执行的开发任务。",
@@ -121,6 +129,13 @@ if (result.status === "NEEDS_EVIDENCE") {
 }
 
 const contract = result.contract;
+if (
+  contract.source.kind !== "feedback" ||
+  contract.source.references.length !== 1 ||
+  contract.source.references[0] !== state.reference
+) {
+  throw new Error("Feedback Issue Contract source does not match the Feedback");
+}
 const policy = await loadPolicy();
 
 ////////////////////////////////////////////////////
@@ -140,6 +155,7 @@ const { issue, duplicate } = await publishContractIssue({
   token: GH_TOKEN,
   contract,
   idempotencyMarker: `signalpatch-feedback:${state.reference}`,
+  trustedBotLogin: SIGNALPATCH_APP_BOT,
 });
 const canonicalIssue = duplicate ?? issue;
 

@@ -58,12 +58,13 @@ async function loadRequest(path) {
   return assertConversationRequest(JSON.parse(await readFile(path, "utf8")));
 }
 
-async function publishRequest(request, repository, token) {
+async function publishRequest(request, repository, token, trustedBotLogin) {
   return publishContractIssue({
     repository,
     token,
     contract: request.contract,
     idempotencyMarker: `signalpatch-conversation-request:${request.requestId}`,
+    trustedBotLogin,
   });
 }
 
@@ -106,10 +107,12 @@ try {
 
 try {
   await movePendingRequests();
-  const { GH_TOKEN, GITHUB_REPOSITORY } = requireEnvironment([
-    "GH_TOKEN",
-    "GITHUB_REPOSITORY",
-  ]);
+  const { GH_TOKEN, GITHUB_REPOSITORY, SIGNALPATCH_APP_BOT } =
+    requireEnvironment([
+      "GH_TOKEN",
+      "GITHUB_REPOSITORY",
+      "SIGNALPATCH_APP_BOT",
+    ]);
   const policy = await loadPolicy();
   const files = (await readdir(processingDirectory))
     .filter((file) => file.endsWith(".json"))
@@ -137,7 +140,12 @@ try {
       request.contract.allowedPaths,
       request.contract.riskLevel,
     );
-    const result = await publishRequest(request, GITHUB_REPOSITORY, GH_TOKEN);
+    const result = await publishRequest(
+      request,
+      GITHUB_REPOSITORY,
+      GH_TOKEN,
+      SIGNALPATCH_APP_BOT,
+    );
     await complete(path, request, result);
     process.stdout.write(
       `${JSON.stringify({ requestId: request.requestId, issueNumber: result.issue.number, issueUrl: result.issue.html_url, duplicateOf: result.duplicate?.number ?? null })}\n`,

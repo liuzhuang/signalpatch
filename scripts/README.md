@@ -74,9 +74,9 @@ flowchart TD
 | -------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
 | [`intake-collect.mjs`](controllers/intake-collect.mjs)                           | CLI    | 从 Supabase 原子认领一条 `PENDING` Feedback；写出脱敏 `evidence.json` 与控制器 `state.json`                   |
 | [`intake-publish.mjs`](controllers/intake-publish.mjs)                           | CLI    | 创建 raw Issue；`NEEDS_EVIDENCE` 保留 raw 并评论缺少上下文，`SPEC_READY` 原地晋升 processed；重复时评论并关闭 |
-| [`manual-issue-intake-collect.mjs`](controllers/manual-issue-intake-collect.mjs) | CLI    | 读取已有 `content:raw` Issue 的正文与非机器人评论，不创建 Issue                                               |
-| [`manual-issue-intake-publish.mjs`](controllers/manual-issue-intake-publish.mjs) | CLI    | 将 Manual Issue Intake 结果评论或写回原 Issue，并原地晋升 processed                                           |
-| [`prepare-issue.mjs`](controllers/prepare-issue.mjs)                             | CLI    | 从 processed GitHub Issue 提取 `signalpatch-contract` 标记块；写出 `contract.json` 与最小 `issue.json`        |
+| [`manual-issue-intake-collect.mjs`](controllers/manual-issue-intake-collect.mjs) | CLI    | 读取新建、raw 或上下文已变化的 ready 手工 Issue 正文与非机器人评论，不创建 Issue                              |
+| [`manual-issue-intake-publish.mjs`](controllers/manual-issue-intake-publish.mjs) | CLI    | 带上下文修订指纹写回 Manual Issue；竞态时恢复 raw，稳定后原地晋升 processed                                   |
+| [`prepare-issue.mjs`](controllers/prepare-issue.mjs)                             | CLI    | 验证发布身份，从系统 Issue 正文或 App Bot Manual 评论提取 Contract；写出 `contract.json` 与最小 `issue.json`  |
 | [`enqueue-conversation-issue.mjs`](controllers/enqueue-conversation-issue.mjs)   | CLI    | 校验已确认 Contract；`gh` 有权限时直接发布，否则原子写入本地 `pending/` 队列（`.tmp` → rename）               |
 | [`publish-conversation-issues.mjs`](controllers/publish-conversation-issues.mjs) | CLI    | 消费本地队列：校验 Request、创建 raw Issue、精确去重并晋升 processed                                          |
 | [`record-run.mjs`](controllers/record-run.mjs)                                   | CLI    | 幂等写入 Supabase `automation_runs`；按阶段更新 Problem 的 Repair Status                                      |

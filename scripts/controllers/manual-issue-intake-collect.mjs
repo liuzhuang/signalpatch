@@ -1,16 +1,21 @@
 #!/usr/bin/env node
-// 【做什么】从已有 content:raw Issue 读取脱敏的正文与用户补充评论
+// 【做什么】从新建、raw 或待更新的 Manual Issue 读取脱敏正文与用户评论
 // 【何时跑】manual-issue-intake.yml collect Job；只读 GitHub，不创建 Issue
 import { mkdir, writeFile } from "node:fs/promises";
 
 import { requestJson, requireEnvironment } from "./lib/http.mjs";
+import {
+  isManualIssueCandidate,
+  listAll,
+  manualIssueContextFingerprint,
+  manualIssueContextFrom,
+} from "./lib/issue-lifecycle.mjs";
 
 const [requestedIssueNumber, outputDirectory = ".ai/runs/manual-issue-intake"] =
   process.argv.slice(2);
-const { GH_TOKEN, GITHUB_REPOSITORY } = requireEnvironment([
-  "GH_TOKEN",
-  "GITHUB_REPOSITORY",
-]);
+const { GH_TOKEN, GITHUB_REPOSITORY, SIGNALPATCH_APP_BOT } = requireEnvironment(
+  ["GH_TOKEN", "GITHUB_REPOSITORY", "SIGNALPATCH_APP_BOT"],
+);
 await mkdir(outputDirectory, { recursive: true });
 
 const headers = {
@@ -27,11 +32,11 @@ function labelNames(issue) {
 }
 
 async function loadComments(issue) {
-  const commentsUrl = new URL(
-    `${repositoryUrl}/issues/${issue.number}/comments`,
+  return listAll(
+    GITHUB_REPOSITORY,
+    GH_TOKEN,
+    `issues/${issue.number}/comments`,
   );
-  commentsUrl.searchParams.set("per_page", "100");
-  return requestJson(commentsUrl, { headers });
 }
 
 function hasNewUserContext(issue, comments) {
@@ -40,14 +45,22 @@ function hasNewUserContext(issue, comments) {
     .filter(
       (comment) =>
         comment.user?.type === "Bot" &&
+        comment.user?.login === SIGNALPATCH_APP_BOT &&
         comment.body?.includes("<!-- signalpatch-manual-needs-evidence:"),
     )
     .at(-1);
   if (!lastBotRequest) return true;
+  const evaluatedContext = lastBotRequest.body?.match(
+    /signalpatch-manual-needs-context:([0-9a-f]{64})/i,
+  )?.[1];
+  if (evaluatedContext) {
+    return manualIssueContextFingerprint(issue, comments) !== evaluatedContext;
+  }
   return comments.some(
     (comment) =>
       comment.user?.type !== "Bot" &&
-      Date.parse(comment.created_at) > Date.parse(lastBotRequest.created_at),
+      Date.parse(comment.updated_at ?? comment.created_at) >=
+        Date.parse(lastBotRequest.created_at),
   );
 }
 
@@ -71,9 +84,8 @@ async function loadIssue() {
   url.searchParams.set("per_page", "100");
   const issues = await requestJson(url, { headers });
   for (const issue of issues) {
-    if (issue.pull_request || !labelNames(issue).includes("content:raw"))
-      continue;
     const comments = await loadComments(issue);
+    if (!isManualIssueCandidate(issue, comments, SIGNALPATCH_APP_BOT)) continue;
     if (hasNewUserContext(issue, comments)) return { issue, comments };
   }
   return null;
@@ -81,24 +93,31 @@ async function loadIssue() {
 
 const selected = await loadIssue();
 const issue = selected?.issue;
-if (!issue || !labelNames(issue).includes("content:raw")) {
+const eventName = process.env.GITHUB_EVENT_NAME ?? "";
+const eventAction = process.env.SIGNALPATCH_EVENT_ACTION ?? "";
+const forceEvaluation =
+  eventName === "workflow_dispatch" ||
+  (eventName === "issues" && ["edited", "reopened"].includes(eventAction)) ||
+  (eventName === "issue_comment" && eventAction === "deleted");
+if (
+  !isManualIssueCandidate(
+    issue,
+    selected?.comments ?? [],
+    SIGNALPATCH_APP_BOT,
+  ) ||
+  (!forceEvaluation && !hasNewUserContext(issue, selected.comments))
+) {
   await writeFile(`${outputDirectory}/empty`, "true\n");
-  process.stdout.write("No open content:raw Issue.\n");
+  process.stdout.write("No eligible manual content:raw Issue.\n");
   process.exit(0);
 }
 
 const comments = selected.comments;
 const reference = `manual-issue:${issue.number}`;
+const context = manualIssueContextFrom(issue, comments);
 const evidence = {
   source: { kind: "manual-issue", reference },
-  title: issue.title,
-  message: issue.body ?? "",
-  comments: comments
-    .filter((comment) => comment.user?.type !== "Bot")
-    .map((comment) => ({
-      body: comment.body ?? "",
-      createdAt: comment.created_at,
-    })),
+  ...context,
   receivedAt: issue.created_at,
 };
 
@@ -113,6 +132,7 @@ await writeFile(
       issueNumber: issue.number,
       reference,
       updatedAt: issue.updated_at,
+      contextFingerprint: manualIssueContextFingerprint(issue, comments),
     },
     null,
     2,

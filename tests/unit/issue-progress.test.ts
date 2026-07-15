@@ -4,6 +4,7 @@ import {
   extractStartedAt,
   progressComment,
   progressMarker,
+  trustedProgressComment,
 } from "../../scripts/controllers/issue-progress.mjs";
 
 describe("Issue Delivery progress comment", () => {
@@ -28,5 +29,26 @@ describe("Issue Delivery progress comment", () => {
         runUrl: "https://github.com/liuzhuang/signalpatch/actions/runs/1",
       }),
     ).toContain("Codex 执行中");
+  });
+
+  it("ignores a public progress marker and reuses only the configured App Bot comment", () => {
+    const appBot = "signalpatch-automation[bot]";
+    const comments = [
+      {
+        id: 1,
+        body: progressMarker,
+        user: { type: "User", login: "external-user" },
+      },
+      {
+        id: 2,
+        body: progressMarker,
+        user: { type: "Bot", login: appBot },
+      },
+    ];
+
+    expect(trustedProgressComment(comments, appBot)?.id).toBe(2);
+    expect(
+      trustedProgressComment(comments.slice(0, 1), appBot),
+    ).toBeUndefined();
   });
 });

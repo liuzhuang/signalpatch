@@ -1,6 +1,6 @@
 # issue-delivery.yml 说明
 
-[issue-delivery.yml](issue-delivery.yml) 读取 GitHub Issue 正文里的 **Issue Contract**，让 Codex **改代码**（R0–R2）或 **只读分析**（R3），再由 Controller 推分支、开 **Draft PR**（或 R3 时写 Issue 评论转人工）。成功后 PR 会触发 [pr-gate.yml](pr-gate.yml)（详见 [pr-gate.yml.md](pr-gate.yml.md)）。
+[issue-delivery.yml](issue-delivery.yml) 读取可信来源中的 **Issue Contract**：Feedback/Codex 使用受信任发布者写入的 Issue 正文，Manual Intake 使用 GitHub App Bot 的专用评论。随后 Codex **改代码**（R0–R2）或 **只读分析**（R3），Controller 再推分支、开 **Draft PR**（或 R3 时写 Issue 评论转人工）。成功后 PR 会触发 [pr-gate.yml](pr-gate.yml)（详见 [pr-gate.yml.md](pr-gate.yml.md)）。
 
 **文档结构**：[一、总体](#一总体) → [二、细节（各 Job）](#二细节) → [三、答疑（术语与开关）](#三答疑)
 
@@ -35,11 +35,11 @@ flowchart LR
 
 ### 上游入口
 
-| 来源          | Workflow / 脚本                                                                                                         | 如何进入 Delivery                            |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| 网站 Feedback | [feedback-intake.yml.md](feedback-intake.yml.md) → [`intake-publish.mjs`](../../scripts/controllers/intake-publish.mjs) | 添加 **`content:processed`** 标签            |
-| Codex 对话    | [publish-conversation-issues.yml.md](publish-conversation-issues.yml.md)                                                | 添加 **`content:processed`** 标签            |
-| 手动 Issue    | GitHub 页面或 `gh issue create`                                                                                         | 有效 Contract + **`content:processed`** 标签 |
+| 来源          | Workflow / 脚本                                                                                                         | 如何进入 Delivery                                    |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| 网站 Feedback | [feedback-intake.yml.md](feedback-intake.yml.md) → [`intake-publish.mjs`](../../scripts/controllers/intake-publish.mjs) | 添加 **`content:processed`** 标签                    |
+| Codex 对话    | [publish-conversation-issues.yml.md](publish-conversation-issues.yml.md)                                                | 添加 **`content:processed`** 标签                    |
+| 手动 Issue    | [manual-issue-intake.yml.md](manual-issue-intake.yml.md)                                                                | App Bot Contract 评论 + **`content:processed`** 标签 |
 
 ### 触发方式摘要
 
@@ -486,18 +486,18 @@ stdout：`{"idempotencyKey":"..."}`，exit 0。
 
 ### Issue Contract（Delivery 视角）
 
-Delivery **只认** Issue 正文中 `<!-- signalpatch-contract:start/end -->` 标记块里的 JSON，不认标题或其它 Markdown 自由文字。完整定义、字段表与 Intake 产出方式见 [feedback-intake.yml.md § Issue Contract](feedback-intake.yml.md#issue-contract-是什么)。
+Delivery **只认**可信发布来源中 `<!-- signalpatch-contract:start/end -->` 标记块里的 JSON，不认标题或其它自由文字。Feedback/Codex Issue 正文还必须来自配置的 App Bot 或仓库 OWNER/MEMBER/COLLABORATOR；Manual Contract 必须来自 `SIGNALPATCH_APP_BOT` 完全匹配的 Bot 评论。完整定义、字段表与 Intake 产出方式见 [feedback-intake.yml.md § Issue Contract](feedback-intake.yml.md#issue-contract-是什么)。
 
 | 项目           | Delivery 侧要点                                                                                                                           |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **提取**       | [`prepare-issue.mjs`](../../scripts/controllers/prepare-issue.mjs) 正则抠出 JSON → `contract.json`                                        |
+| **提取**       | [`prepare-issue.mjs`](../../scripts/controllers/prepare-issue.mjs) 验证发布者后提取 JSON → `contract.json`                                |
 | **校验**       | [`validate-json.mjs`](../../scripts/ai/validate-json.mjs) 对照 [issue-contract.schema.json](../../.ai/schemas/issue-contract.schema.json) |
-| **前置条件**   | Issue 须带 `content:processed` 标签并包含有效 Issue Contract                                                                              |
+| **前置条件**   | 自动事件中的 Issue 须为打开状态且不是 PR，带 `content:processed` 与 `ai:ready`，不带 `duplicate`，并包含有效 Issue Contract               |
 | **传给 Codex** | 仅 `contract.json` + 最小 `issue.json`（number/title/url），**不传**整段 Issue body                                                       |
 
 ### proceed 逻辑
 
-`proceed` 是 prepare Job 输出的固定字符串 `true`，供现有 build / analyze-r3 条件复用。只有 `content:processed` 标签事件或运维补跑进入 prepare；其他标签事件会跳过该 Job。
+`proceed` 是 prepare Job 输出的固定字符串 `true`，供现有 build / analyze-r3 条件复用。只有满足打开状态、非 PR、`content:processed`、`ai:ready` 和非重复条件的标签事件，或运维补跑会进入 prepare；其他标签事件会跳过该 Job。Manual Issue Contract 还必须满足 App Bot 身份与实时上下文指纹；`mark-codex-started` 使用 prepare 输出的 Contract digest 执行认领，并在 `ai:building` PATCH 后复读。digest 或上下文变化时不启动 Builder。非 processed 标签 Run 使用独立并发组，不能替换真正的 processed pending Run。
 
 #### 在 yml 里如何产生
 

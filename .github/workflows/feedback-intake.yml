@@ -116,9 +116,6 @@ jobs:
   publish:
     needs: qualify
     runs-on: ubuntu-latest
-    concurrency:
-      group: issue-publisher
-      cancel-in-progress: false
     permissions:
       contents: read
       issues: write
@@ -154,6 +151,7 @@ jobs:
       - name: Publish validated result
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SIGNALPATCH_APP_BOT: ${{ vars.SIGNALPATCH_APP_BOT }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
         run: >-
