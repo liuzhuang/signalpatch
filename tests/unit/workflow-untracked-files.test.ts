@@ -185,4 +185,68 @@ describe("delivery workflow stage boundaries", () => {
     expect(guidance).toContain("Do not require Preview or Production evidence");
     expect(guidance).toContain("Do not run write-producing verification");
   });
+
+  it("passes structured Reviewer findings into Repair without tracking pnpm cache files", () => {
+    const outcome = workflow(".github/workflows/pr-outcome.yml");
+    const collectSteps = outcome.jobs["collect-failure"].steps as Array<{
+      id?: string;
+      if?: string;
+      name?: string;
+      uses?: string;
+      run?: string;
+      with?: Record<string, unknown>;
+      "continue-on-error"?: boolean;
+    }>;
+    const reviewDownload = collectSteps.find(
+      (step) => step.name === "Download structured Reviewer evidence",
+    );
+
+    expect(reviewDownload?.uses).toContain("actions/download-artifact@");
+    expect(reviewDownload?.["continue-on-error"]).toBe(true);
+    expect(reviewDownload?.with?.name).toContain("-review");
+    expect(reviewDownload?.with?.["run-id"]).toContain("gate_run_id");
+
+    const gate = workflow(".github/workflows/pr-gate.yml");
+    const reviewUpload = gate.jobs["independent-review"].steps.find(
+      (step: { uses?: string; with?: Record<string, unknown> }) =>
+        String(step.uses ?? "").startsWith("actions/upload-artifact@") &&
+        String(step.with?.name ?? "").endsWith("-review"),
+    );
+    expect(reviewUpload?.if).toContain("always()");
+
+    const classify = collectSteps.find((step) => step.id === "classify")
+      ?.run as string;
+    expect(classify).toContain("compose-repair-evidence.mjs");
+    expect(classify).toContain("repair-evidence.json");
+    expect(classify).toContain('grep -Fq "Require approval"');
+    expect(classify).toContain(
+      "[[ ! -s .ai/runs/outcome/reviewer/review.json ]]",
+    );
+    expect(classify).toContain('kind="evidence-missing"');
+    expect(classify).toContain(
+      'require("./.ai/runs/outcome/repair-evidence.json").fingerprint',
+    );
+
+    const render = stepScript(
+      ".github/workflows/pr-outcome.yml",
+      "repair",
+      "Render Repair prompt",
+    );
+    expect(render).toContain(
+      "--evidence .ai/runs/outcome/repair-evidence.json",
+    );
+
+    expect(readFileSync(".gitignore", "utf8")).toContain("/.pnpm-store/");
+
+    const stop = stepScript(
+      ".github/workflows/pr-outcome.yml",
+      "mark-human-required",
+      "Stop the bounded Repair loop",
+    );
+    expect(stop).toContain('--repo "$GITHUB_REPOSITORY"');
+    expect(stop).toContain('FAILURE_KIND" == "evidence-missing"');
+    expect(outcome.jobs["mark-human-required"].if as string).toContain(
+      "failure_kind == 'evidence-missing'",
+    );
+  });
 });

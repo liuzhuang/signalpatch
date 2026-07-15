@@ -112,7 +112,17 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      # failure-fingerprint.mjs 规范化日志后 SHA256；classify-failure.mjs 决定是否应重跑 Gate 而非 Repair。
+      # Reviewer 的结构化输出即使 decision 拒绝也必须上传；缺失时继续使用普通失败摘要。
+      - name: Download structured Reviewer evidence
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pr-${{ needs.trust.outputs.pr_number }}-review
+          path: .ai/runs/outcome/reviewer
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.gate_run_id || github.event.workflow_run.id }}
+      # failure-fingerprint.mjs 规范化日志后 SHA256；compose-repair-evidence.mjs 再附加有界 Reviewer findings。
       - id: classify
         env:
           GH_TOKEN: ${{ github.token }}
@@ -121,14 +131,27 @@ jobs:
         run: |
           mkdir -p .ai/runs/outcome
           gh run view "$RUN_ID" --log-failed > .ai/runs/outcome/failure.log
+          reviewer_evidence_missing=false
+          if grep -Fq "Require approval" .ai/runs/outcome/failure.log && \
+            [[ ! -s .ai/runs/outcome/reviewer/review.json ]]; then
+            echo "Reviewer rejected the PR, but its structured evidence artifact is missing." >&2
+            reviewer_evidence_missing=true
+          fi
           node scripts/ai/failure-fingerprint.mjs \
             < .ai/runs/outcome/failure.log \
             > .ai/runs/outcome/failure.json
+          node scripts/ai/compose-repair-evidence.mjs \
+            .ai/runs/outcome/failure.json \
+            .ai/runs/outcome/reviewer/review.json \
+            > .ai/runs/outcome/repair-evidence.json
           node scripts/ai/classify-failure.mjs \
             .ai/runs/outcome/failure.log \
             > .ai/runs/outcome/classification.json
           kind=$(node -p 'require("./.ai/runs/outcome/classification.json").kind')
-          fingerprint=$(node -p 'require("./.ai/runs/outcome/failure.json").fingerprint')
+          if [[ "$reviewer_evidence_missing" == "true" ]]; then
+            kind="evidence-missing"
+          fi
+          fingerprint=$(node -p 'require("./.ai/runs/outcome/repair-evidence.json").fingerprint')
           echo "failure_kind=$kind" >> "$GITHUB_OUTPUT"
           echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
           # 基础设施故障只原样重跑一次，不让 Codex 修改业务代码来掩盖 Runner 或网络问题。
@@ -172,13 +195,13 @@ jobs:
           next_attempt=$((repair_count + 1))
           node scripts/ai/check-repair-budget.mjs "$next_attempt" "$FINGERPRINT"
           ! git log --format=%B origin/main..HEAD | grep -Fq "failure:${FINGERPRINT}"
-      # failure.json 含截断日志摘要，作为 Repair Prompt 的 evidence。
+      # repair-evidence.json 含截断日志摘要和结构化 Reviewer findings。
       - name: Render Repair prompt
         run: |
           node scripts/ai/render-prompt.mjs \
             --stage repair \
             --contract .ai/runs/outcome/contract.json \
-            --evidence .ai/runs/outcome/failure.json \
+            --evidence .ai/runs/outcome/repair-evidence.json \
             > .ai/runs/outcome/repair-prompt.md
       - name: Repair with Codex
         run: |
@@ -279,7 +302,7 @@ jobs:
   # Repair 的次数、重复指纹、空 Diff 或策略检查失败都收敛到人工处理，不无限重启。
   mark-human-required:
     needs: [trust, collect-failure, repair]
-    if: always() && needs.trust.outputs.mode == 'automation' && needs.collect-failure.outputs.failure_kind == 'application' && needs.repair.result == 'failure'
+    if: always() && needs.trust.outputs.mode == 'automation' && (needs.collect-failure.outputs.failure_kind == 'evidence-missing' || (needs.collect-failure.outputs.failure_kind == 'application' && needs.repair.result == 'failure'))
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -291,10 +314,20 @@ jobs:
           private-key: ${{ secrets.SIGNALPATCH_APP_PRIVATE_KEY }}
       - name: Stop the bounded Repair loop
         env:
+          FAILURE_KIND: ${{ needs.collect-failure.outputs.failure_kind }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          gh issue edit "${{ needs.trust.outputs.issue_number }}" --add-label "ai:human-required"
-          gh issue comment "${{ needs.trust.outputs.issue_number }}" --body "The bounded Repair loop stopped because its policy or attempt guard failed. Human review is required."
+          if [[ "$FAILURE_KIND" == "evidence-missing" ]]; then
+            reason="The independent Reviewer rejected this PR, but its structured evidence artifact is missing. Human review is required."
+          else
+            reason="The bounded Repair loop stopped because its policy or attempt guard failed. Human review is required."
+          fi
+          gh issue edit "${{ needs.trust.outputs.issue_number }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --add-label "ai:human-required"
+          gh issue comment "${{ needs.trust.outputs.issue_number }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --body "$reason"
 
   # 仅 automation 且 Gate conclusion=success：合并、promote Gate 已测 Deployment、Production Smoke、关 Issue。
   finalize:

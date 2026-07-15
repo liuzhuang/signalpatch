@@ -155,6 +155,7 @@ jobs:
             .ai/runs/gate/review.json
           node -e 'const r=require("./.ai/runs/gate/review.json"); if(r.decision!=="APPROVE") process.exit(1)'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
         with:
           name: pr-${{ github.event.pull_request.number }}-review
           path: .ai/runs/gate/review.json
