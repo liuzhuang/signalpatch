@@ -31,7 +31,8 @@
 | 查看 Actions 运行记录           | 第十一节   |
 | 理解 `gh`、GitHub App 和 Runner | 第十二节   |
 | 对照本次真实实例                | 第十三节   |
-| 查看三种入口的最新 E2E          | 第十四节   |
+| 查看第一轮三入口 E2E            | 第十四节   |
+| 查看合并后的真实产品 Issue 复验 | 第十五节   |
 
 ## 本次 Codex 实际执行顺序
 
@@ -1413,7 +1414,7 @@ cd /Users/liuzhuang/actions-runner-signalpatch
 - 人工批准的对象是具体的 `r2-approval` Deployment，不是永久批准某个 PR。
 - PR Head、PR Gate 结果或 Workflow Run 变化后，需要重新核对并可能重新审批。
 - Issue 只有在 Production Smoke Test 通过且最终证据写入后才关闭。
-- 该实例完成时，Production `/health` 返回 Accepted Head `9510f45bba6d5451e982d2f84b2c79fef249b6d8`；当前生产版本见第十四节。
+- 该实例完成时，Production `/health` 返回 Accepted Head `9510f45bba6d5451e982d2f84b2c79fef249b6d8`；当前生产版本见第十五节。
 
 ## 十四、2026 年 7 月 15 日方案变更与三入口 E2E
 
@@ -1540,6 +1541,129 @@ GitHub API 最终确认以下 3 个 Runner 同时在线：
 - `/health.version` 为 `d1ee7acc0a1bbf57df5401d7e263412e0898ef7e`，与 PR #34 Accepted Head 一致。
 - E2E 验收完成时，本地 `main` 已同步到 `4280e196eb8c5238d5948651036f11664078c58f`；本次文档修改在其后单独进行。
 - 3 个 Runner 共用同一 macOS 用户和 HOME。后续需要关注 Codex 认证、限流、CPU、内存和磁盘；只有出现同一 Issue 或 PR 的实际并发浪费时，才增加跨 Workflow 的 `codex-issue-*` 或 `codex-pr-*` Job 并发组。
+
+## 十五、2026 年 7 月 15 日合并后真实产品 Issue 三入口复验
+
+本节记录上一轮流程变更合并后的第二轮生产复验。三个入口使用不同的真实产品意见，分别修改 Repair Status 时间说明、关于我们页面的公开 Issue 入口和 Feedback 输入框字数提示。第十四节保留第一轮记录，本节不替换其 Issue、Run 或版本证据。
+
+### 1. 本轮计划与验证边界
+
+| 项目              | 最终执行方式                                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 三个入口          | 依次执行手工 GitHub Issue、Codex 对话创建 Issue、生产网页提交 Feedback                                                         |
+| Intake            | 手工入口读取正文及用户评论；Codex 入口使用已确认的 `codex-conversation` Contract；网页入口严格匹配本次 Tracking ID 的 Evidence |
+| Builder 与 Repair | Codex Sandbox 内只强制执行精确的 `pnpm verify` 和 `git diff --check`；不启动本地服务、浏览器或 `pnpm build`                    |
+| GitHub PR Gate    | 在干净环境独立执行 `verify`、`build`、`independent-review` 和 `preview-smoke`                                                  |
+| PR Outcome        | 重新核对 PR Head，合并已接受提交，提升同一个 staged deployment，再执行 Production Smoke Test                                   |
+| 重复执行判定      | 不以 Workflow Run 总数判断；核对来源 marker、Build Artifact、AI PR 和进度评论是否各只有一个                                    |
+| 完成条件          | Issue 关闭并标记 `ai:done`，Production `/health.version` 等于 Accepted Head，页面验收通过                                      |
+
+Codex 入口首次执行暴露了 Sandbox 与运行时验收职责混用的问题。Builder 已生成产品修改，但 Playwright/Chromium 的 IPC/Mach 端口和 `next build` 的 Turbopack 本地端口在 `workspace-write` Sandbox 中不可用。失败发生在运行时预检，不是产品 Diff 或 `pnpm verify` 失败。
+
+该问题由 [PR #39](https://github.com/liuzhuang/signalpatch/pull/39) 修复：Codex 负责实现和快速自检，GitHub 继续负责独立构建、浏览器验收和生产验证。该 PR 的 Head 为 `0abf69d61db510fa1be3b946435756daf7601cf9`，PR Gate [29398591900](https://github.com/liuzhuang/signalpatch/actions/runs/29398591900) 经 `r2-approval` 人工批准后通过，合并提交为 `3238fb28412efd20edbedb25ae94002190b31602`。这次调整没有放宽路径、风险、审查、凭据或发布限制。
+
+### 2. E2E 1：手工创建 GitHub Issue
+
+产品意见要求为 Repair Status 查询结果中的时间增加「更新时间：」前缀，并保持时间格式、样式和查询行为不变。
+
+- Issue：[#36](https://github.com/liuzhuang/signalpatch/issues/36)
+- 用户补充评论：[Issue comment 4977743830](https://github.com/liuzhuang/signalpatch/issues/36#issuecomment-4977743830)
+- 首次 opened 事件 Intake：[Run 29395544794](https://github.com/liuzhuang/signalpatch/actions/runs/29395544794)
+- 吸收补充评论后的 Intake：[Run 29395629999](https://github.com/liuzhuang/signalpatch/actions/runs/29395629999)
+- 最终 Contract：[Issue comment 4977806496](https://github.com/liuzhuang/signalpatch/issues/36#issuecomment-4977806496)
+- 有效 Issue Delivery：[Run 29396102359](https://github.com/liuzhuang/signalpatch/actions/runs/29396102359)
+- PR：[#37](https://github.com/liuzhuang/signalpatch/pull/37)
+- Accepted Head：`c60128fea14099dbb8d158f25bb0809600ee2f49`
+- 合并提交：`ffd77c66abd0eb402ce27f83f861f4eabb78e661`
+- PR Gate：[Run 29396483400](https://github.com/liuzhuang/signalpatch/actions/runs/29396483400)
+- Preview：`https://signalpatch-a3bg4iqyo-liuzhuangoutlookcoms-projects.vercel.app`
+- PR Outcome：[Run 29396646701](https://github.com/liuzhuang/signalpatch/actions/runs/29396646701)
+- 最终验收：[Issue comment 4977887692](https://github.com/liuzhuang/signalpatch/issues/36#issuecomment-4977887692)
+
+用户评论发生在首次 Intake 执行期间。首次 run 没有发布过期 Contract；评论事件重新读取正文和全部非机器人评论，最终 Contract 的唯一来源为 `manual-issue:36`。生产页面使用有效 Tracking ID 查询后，桌面端和移动端都显示「更新时间：<现有时间>」，时间格式和 Repair Status 查询行为保持不变。
+
+### 3. E2E 2：通过 Codex 创建 Issue
+
+产品意见要求在 `/about` 增加「查看公开 Issue」链接，精确指向 `https://github.com/liuzhuang/signalpatch/issues`，同时保留「返回首页」。
+
+- Conversation Request ID：`2bbf957c-b326-428c-b9ab-9e969e6f9eae`
+- Issue：[#38](https://github.com/liuzhuang/signalpatch/issues/38)
+- 首次失败的 Issue Delivery：[Run 29396875336](https://github.com/liuzhuang/signalpatch/actions/runs/29396875336)
+- Sandbox 边界修复：[PR #39](https://github.com/liuzhuang/signalpatch/pull/39)
+- 恢复后的有效 Issue Delivery：[Run 29398908318](https://github.com/liuzhuang/signalpatch/actions/runs/29398908318)
+- PR：[#40](https://github.com/liuzhuang/signalpatch/pull/40)
+- Accepted Head：`5191e4015b03c51c9858049f2c97ae3ff66ca2c4`
+- 合并提交：`70cd70e2c66426a25322399aead5af6f2c8bcc33`
+- PR Gate：[Run 29399178897](https://github.com/liuzhuang/signalpatch/actions/runs/29399178897)
+- Preview：`https://signalpatch-mer68odye-liuzhuangoutlookcoms-projects.vercel.app`
+- PR Outcome：[Run 29399534533](https://github.com/liuzhuang/signalpatch/actions/runs/29399534533)
+- 最终验收：[Issue comment 4978276894](https://github.com/liuzhuang/signalpatch/issues/38#issuecomment-4978276894)
+
+首次 Delivery 因旧 preflight 要求 Codex 在 Sandbox 中执行浏览器和构建而失败，流程进入 `ai:human-required`，没有发布半成品分支、Build Artifact 或 PR。PR #39 合并后，移除 `ai:human-required`、恢复 `ai:ready`，再通过一次明确的 `workflow_dispatch` 执行恢复。最终只有一个 `issue-38-build` Artifact 和一个 `ai/issue-38-delivery` PR。
+
+生产 `/about` 在 `1280×720` 和 `390×844` 视口均显示两个链接。「查看公开 Issue」的 `href` 精确匹配公开 Issues 地址，「返回首页」保持为 `/`，页面没有水平溢出。
+
+### 4. E2E 3：通过生产网页提交 Feedback
+
+生产页面实际提交的内容为：
+
+> Feedback 输入框没有字数提示，用户不知道最多能写多少。请在输入框下方显示实时字数，例如「12 / 2000」，输入后立即更新。
+
+- Tracking ID：`e4463504-79ba-4ea2-8fee-32de7113f493`
+- 初始 Repair Status：`RECEIVED`
+- Evidence 引用：`feedback:e4463504-79ba-4ea2-8fee-32de7113f493`
+- Feedback Intake：[Run 29399825810](https://github.com/liuzhuang/signalpatch/actions/runs/29399825810)
+- Intake Evidence Artifact：`8336589704`
+- Intake Result Artifact：`8336652008`
+- Intake 结果：`SPEC_READY`、`R1`、5 个 Acceptance Criteria，不要求补充上下文
+- Issue：[#41](https://github.com/liuzhuang/signalpatch/issues/41)
+- Issue Delivery：[Run 29400050578](https://github.com/liuzhuang/signalpatch/actions/runs/29400050578)
+- Build Artifact：`8336731178`
+- PR：[#42](https://github.com/liuzhuang/signalpatch/pull/42)
+- Accepted Head：`bb0e89ab4cdfe4d5ba773b40381b6c90f0146d01`
+- 合并提交：`a4e8ea77bbd2b687f2af5ac847f894b624a29320`
+- PR Gate：[Run 29400276309](https://github.com/liuzhuang/signalpatch/actions/runs/29400276309)
+- Preview：`https://signalpatch-qjluv0ftu-liuzhuangoutlookcoms-projects.vercel.app`
+- PR Outcome：[Run 29400564487](https://github.com/liuzhuang/signalpatch/actions/runs/29400564487)
+- 最终验收：[Issue comment 4978452521](https://github.com/liuzhuang/signalpatch/issues/41#issuecomment-4978452521)
+
+提交前，最近一次 Feedback Intake 明确返回 `No pending Feedback`。网页提交返回 HTTP `201` 后只触发一次 `workflow_dispatch`。下载的 Evidence Artifact 严格满足：
+
+```json
+{
+  "kind": "feedback",
+  "reference": "feedback:e4463504-79ba-4ea2-8fee-32de7113f493"
+}
+```
+
+Contract 的 `source.references` 也只有该值，因此 Issue #41 可以确定来自本次网页提交。Builder 只修改 `src/components/feedback-form.tsx`、`src/app/globals.css` 和 `tests/smoke/app.spec.ts`，`pnpm verify` 的 14 个测试文件共 87 项测试全部通过。独立 Reviewer 返回 `APPROVE`，PR Gate 的 `verify`、`build`、`independent-review` 和 `preview-smoke` 全部成功。
+
+PR Outcome 重新核对 Accepted Head 后合并 PR #42，提升同一个 staged deployment，Production Smoke Test 为 `10/10`。本机随后直接访问生产环境，在 `1280×720` 和 `390×844` 视口确认：
+
+- 空输入显示 `0 / 2000`。
+- 输入 12 个字符后立即显示 `12 / 2000`。
+- 尝试输入 2001 个字符时，textarea 只保留 2000 个字符并显示 `2000 / 2000`。
+- 字数提示位于输入框下方且可见，两个视口均无水平溢出。
+- 使用本次 Tracking ID 查询时，页面和 API 均返回 `RELEASED`。
+
+### 5. 重复执行总审计
+
+| 入口       | 唯一来源 marker                                                                  | Build Artifact     | AI PR  | 进度评论 |
+| ---------- | -------------------------------------------------------------------------------- | ------------------ | ------ | -------- |
+| 手工 Issue | `<!-- signalpatch-manual-issue:36 -->`                                           | `issue-36-build` 1 | #37，1 | 1        |
+| Codex      | `<!-- signalpatch-conversation-request:2bbf957c-b326-428c-b9ab-9e969e6f9eae -->` | `issue-38-build` 1 | #40，1 | 1        |
+| 网页       | `<!-- signalpatch-feedback:feedback:e4463504-79ba-4ea2-8fee-32de7113f493 -->`    | `issue-41-build` 1 | #42，1 | 1        |
+
+三个 Issue 的标签、Bot 评论和状态变化会产生额外 Workflow Run，但未获得执行权的 Issue Delivery 和 Manual Intake Job 均为 `skipped`。有效 Delivery 分别为 `29396102359`、`29398908318` 和 `29400050578`。Issue #38 的首次基础设施失败没有创建第二个 Build Artifact 或 PR，因此不构成重复产品交付。
+
+### 6. 最终状态
+
+- Issue #36、#38 和 #41 均已关闭并标记 `ai:done`。
+- PR #37、#40 和 #42 均已合并；对应 PR Gate 和 PR Outcome 最终均为 `success`。
+- Production 为 `https://signalpatch.meact.dev`。
+- Production `/health.version` 为 `bb0e89ab4cdfe4d5ba773b40381b6c90f0146d01`，与 PR #42 Accepted Head 一致。
+- Tracking ID `e4463504-79ba-4ea2-8fee-32de7113f493` 的最终 Repair Status 为 `RELEASED`。
+- 本轮 E2E 完成时，本地 `main` 已同步到 `a4e8ea77bbd2b687f2af5ac847f894b624a29320`；本节文档修改在该提交之后保留在本地工作树。
 
 ## 参考文件
 
