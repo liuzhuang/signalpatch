@@ -13,6 +13,9 @@ export default function About() {
       </header>
       <footer>
         <Link href="/">返回首页</Link>
+        <a href="https://github.com/liuzhuang/signalpatch/issues">
+          查看公开 Issue
+        </a>
       </footer>
     </main>
   );

@@ -94,18 +94,39 @@ test("homepage links to the mock About page", async ({ page }) => {
   await expect(page.getByText("Mock 数据", { exact: true })).toBeVisible();
 });
 
-test("About page links back to the homepage", async ({ page }) => {
-  await page.goto("/about");
+test("About page links to the homepage and public Issues", async ({ page }) => {
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/about");
 
-  await expect(
-    page.getByRole("heading", { level: 1, name: "关于我们" }),
-  ).toBeVisible();
-  await expect(page.getByText("SignalPatch", { exact: true })).toBeVisible();
-  await expect(page.getByText("Mock 数据", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "关于我们" }),
+    ).toBeVisible();
+    await expect(page.getByText("SignalPatch", { exact: true })).toBeVisible();
+    await expect(page.getByText("Mock 数据", { exact: true })).toBeVisible();
+
+    const homeLink = page.getByRole("link", { name: "返回首页" });
+    await expect(homeLink).toBeVisible();
+    await expect(homeLink).toHaveAttribute("href", "/");
+    const issuesLink = page.getByRole("link", { name: "查看公开 Issue" });
+    await expect(issuesLink).toBeVisible();
+    await expect(issuesLink).toHaveAttribute(
+      "href",
+      "https://github.com/liuzhuang/signalpatch/issues",
+    );
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  }
 
   const homeLink = page.getByRole("link", { name: "返回首页" });
-  await expect(homeLink).toBeVisible();
-  await expect(homeLink).toHaveAttribute("href", "/");
   await homeLink.click();
 
   await expect(page).toHaveURL(/\/$/);
