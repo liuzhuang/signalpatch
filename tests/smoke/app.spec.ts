@@ -169,7 +169,7 @@ test("homepage content is centered on desktop", async ({ page }) => {
   const footer = page.locator("footer");
   await expect(footer).toHaveCSS("justify-content", "center");
   await expect(footer).toHaveCSS("text-align", "center");
-  await expect(footer.locator("a")).toHaveCount(2);
+  await expect(footer.locator("a")).toHaveCount(3);
   for (const child of await footer.locator(":scope > *").all()) {
     const box = await child.boundingBox();
     expect(box).not.toBeNull();
@@ -293,6 +293,7 @@ test("homepage content remains centered without overflow on mobile", async ({
   }
   await expect(page.locator("input, textarea")).toHaveCount(2);
   await expect(page.getByRole("link", { name: "关于" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "相册" })).toBeVisible();
   await expect(page.getByRole("link", { name: "查看公开仓库" })).toBeVisible();
   expect(
     await page.evaluate(
@@ -301,6 +302,56 @@ test("homepage content remains centered without overflow on mobile", async ({
         document.documentElement.clientWidth,
     ),
   ).toBe(true);
+});
+
+test("homepage links to a responsive gallery with 20 mock images", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const galleryLink = page.getByRole("link", { name: "相册" });
+  await expect(galleryLink).toHaveAttribute("href", "/gallery");
+  await galleryLink.click();
+  await expect(page).toHaveURL(/\/gallery$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "相册" }),
+  ).toBeVisible();
+
+  const grid = page.getByLabel("相册网格");
+  const images = grid.locator("img");
+  await expect(images).toHaveCount(20);
+  for (const image of await images.all()) {
+    await expect(image).toHaveAttribute("alt", /.+/);
+    await expect(image).toBeVisible();
+  }
+
+  for (const [viewport, columnCount] of [
+    [{ width: 1280, height: 720 }, 4],
+    [{ width: 390, height: 844 }, 2],
+  ] as const) {
+    await page.setViewportSize(viewport);
+    await page.goto("/gallery");
+    await expect(grid).toHaveCSS("display", "grid");
+    expect(
+      (await grid.evaluate(
+        (element) =>
+          getComputedStyle(element).gridTemplateColumns.split(" ").length,
+      )) >= columnCount,
+    ).toBe(true);
+    if (viewport.width === 390) {
+      await expect(grid).toHaveCSS(
+        "grid-template-columns",
+        /^\d+(?:\.\d+)?px \d+(?:\.\d+)?px$/,
+      );
+    }
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  }
 });
 
 test("anonymous Feedback returns the same status for exact and padded Tracking IDs", async ({

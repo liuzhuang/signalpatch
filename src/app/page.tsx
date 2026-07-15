@@ -43,6 +43,9 @@ export default function Home() {
         <span>
           <Link href="/about">关于</Link>
         </span>
+        <span>
+          <Link href="/gallery">相册</Link>
+        </span>
         <a href="https://github.com/liuzhuang/signalpatch">查看公开仓库</a>
       </footer>
     </main>
