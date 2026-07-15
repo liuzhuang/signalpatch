@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function About() {
   return (
     <main>
@@ -9,6 +11,9 @@ export default function About() {
           自动化流程转化为生产修复的参考项目。
         </p>
       </header>
+      <footer>
+        <Link href="/">返回首页</Link>
+      </footer>
     </main>
   );
 }
