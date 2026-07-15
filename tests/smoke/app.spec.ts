@@ -1,6 +1,38 @@
 import { appendFile } from "node:fs/promises";
 
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
+
+async function expectHorizontallyCentered(
+  locator: Locator,
+  container: Locator,
+  tolerance = 2,
+) {
+  const [box, containerBox] = await Promise.all([
+    locator.boundingBox(),
+    container.boundingBox(),
+  ]);
+  expect(box).not.toBeNull();
+  expect(containerBox).not.toBeNull();
+  expect(
+    Math.abs(
+      box!.x + box!.width / 2 - (containerBox!.x + containerBox!.width / 2),
+    ),
+  ).toBeLessThanOrEqual(tolerance);
+}
+
+async function expectFullWidth(locator: Locator, container: Locator) {
+  const [box, containerBox, padding] = await Promise.all([
+    locator.boundingBox(),
+    container.boundingBox(),
+    container.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    }),
+  ]);
+  expect(box).not.toBeNull();
+  expect(containerBox).not.toBeNull();
+  expect(box!.width).toBeCloseTo(containerBox!.width - padding, 0);
+}
 
 test("health endpoint reports the deployed version", async ({ request }) => {
   const response = await request.get("/health");
@@ -60,6 +92,88 @@ test("homepage links to the mock About page", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("SignalPatch", { exact: true })).toBeVisible();
   await expect(page.getByText("Mock 数据", { exact: true })).toBeVisible();
+});
+
+test("homepage content is centered on desktop", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/");
+
+  const hero = page.locator(".hero");
+  const heroTop = page.locator(".hero-top");
+  const heroCopy = page.locator(".hero-copy");
+  const flow = page.getByLabel("自动化阶段");
+  await expect(heroTop).toHaveCSS("justify-content", "center");
+  await expect(page.locator("h1")).toHaveCSS("text-align", "center");
+  await expect(heroCopy).toHaveCSS("text-align", "center");
+  await expect(flow).toHaveCSS("justify-content", "center");
+  await expectHorizontallyCentered(heroCopy, hero);
+
+  const workspace = page.locator(".workspace");
+  await expect(workspace).toHaveCSS(
+    "grid-template-columns",
+    /^\d+(?:\.\d+)?px \d+(?:\.\d+)?px$/,
+  );
+  for (const panel of await page.locator(".panel").all()) {
+    await expect(panel.locator(".panel-heading")).toHaveCSS(
+      "justify-content",
+      "center",
+    );
+    await expectHorizontallyCentered(panel.locator("button"), panel);
+    const control = panel.locator("input, textarea");
+    await expect(control).toHaveCSS("text-align", "left");
+    await expectFullWidth(control, panel);
+  }
+  await expect(page.locator("input, textarea")).toHaveCount(2);
+
+  const footer = page.locator("footer");
+  await expect(footer).toHaveCSS("justify-content", "center");
+  await expect(footer).toHaveCSS("text-align", "center");
+  await expect(footer.locator("a")).toHaveCount(2);
+  for (const child of await footer.locator(":scope > *").all()) {
+    const box = await child.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(1280);
+  }
+});
+
+test("homepage content remains centered without overflow on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await expect(page.locator(".workspace")).toHaveCSS(
+    "grid-template-columns",
+    /^\d+(?:\.\d+)?px$/,
+  );
+  await expect(page.getByLabel("自动化阶段")).toHaveCSS(
+    "justify-content",
+    "center",
+  );
+  await expect(page.locator("footer")).toHaveCSS("align-items", "center");
+  await expectHorizontallyCentered(
+    page.locator(".hero-copy"),
+    page.locator(".hero"),
+  );
+  for (const panel of await page.locator(".panel").all()) {
+    await expectHorizontallyCentered(panel.locator("button"), panel);
+    await expect(panel.locator("input, textarea")).toHaveCSS(
+      "text-align",
+      "left",
+    );
+    await expect(panel.locator("input, textarea")).toBeVisible();
+  }
+  await expect(page.locator("input, textarea")).toHaveCount(2);
+  await expect(page.getByRole("link", { name: "关于" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "查看公开仓库" })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth <=
+        document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
 });
 
 test("anonymous Feedback returns the same status for exact and padded Tracking IDs", async ({
