@@ -26,6 +26,39 @@ describe("delivery workflow stage boundaries", () => {
     expect(expose).toBeLessThan(script.indexOf("git diff --binary"));
   });
 
+  it.each([
+    [
+      ".github/workflows/issue-delivery.yml",
+      "build",
+      "Enforce paths and risk",
+      ".ai/runs/delivery/contract.json",
+    ],
+    [
+      ".github/workflows/pr-outcome.yml",
+      "repair",
+      "Validate Repair patch",
+      ".ai/runs/outcome/contract.json",
+    ],
+  ])(
+    "rejects unverified Codex output before publishing %s",
+    (path, job, name, contractPath) => {
+      const script = stepScript(path, job, name);
+      const validateResult = script.indexOf("require-delivery-approval.mjs");
+      const semanticGate = script.slice(
+        validateResult,
+        script.indexOf("validate-diff.mjs"),
+      );
+
+      expect(validateResult).toBeGreaterThan(
+        script.indexOf("validate-json.mjs"),
+      );
+      expect(validateResult).toBeLessThan(script.indexOf("validate-diff.mjs"));
+      expect(validateResult).toBeLessThan(script.indexOf("git diff --binary"));
+      expect(semanticGate).toContain(job);
+      expect(semanticGate).toContain(contractPath);
+    },
+  );
+
   it("does not rerun PR Gate when an accepted Draft PR becomes Ready", () => {
     expect(
       workflow(".github/workflows/pr-gate.yml").on.pull_request.types,
@@ -123,6 +156,35 @@ describe("delivery workflow stage boundaries", () => {
     expect(intake.jobs.publish.concurrency).toBeUndefined();
   });
 
+  it("records failed Builder runs as a user-visible human-required status", () => {
+    const delivery = workflow(".github/workflows/issue-delivery.yml");
+    const finished = delivery.jobs["mark-codex-finished"];
+    const contractDownload = finished.steps.find(
+      (step: { name?: string }) =>
+        step.name === "Download contract for a failed Builder",
+    );
+    const finishStep = finished.steps.find(
+      (step: { name?: string }) =>
+        step.name === "Mark Codex execution finished",
+    );
+    const statusStep = finished.steps.find(
+      (step: { name?: string }) => step.name === "Record failed Builder status",
+    );
+    const run = statusStep?.run as string;
+
+    expect(contractDownload?.if).toContain("needs.build.result != 'success'");
+    expect(contractDownload?.if).toContain("needs.build.result != 'skipped'");
+    expect(run).toContain("scripts/controllers/record-run.mjs");
+    expect(run).toContain("--stage build");
+    expect(run).toContain("--state HUMAN_REQUIRED");
+    expect(run).toContain("--contract .ai/runs/delivery/contract.json");
+    expect(statusStep?.if).toContain("always()");
+    expect(statusStep?.env?.SUPABASE_SERVICE_ROLE_KEY).toContain(
+      "secrets.SUPABASE_SERVICE_ROLE_KEY",
+    );
+    expect(finishStep?.env?.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
+  });
+
   it("lets Intake infer implementation details for actionable product feedback", () => {
     const skill = readFileSync(".agents/skills/issue-intake/SKILL.md", "utf8");
     const evidence = readFileSync(
@@ -186,6 +248,23 @@ describe("delivery workflow stage boundaries", () => {
     expect(guidance).toContain("Do not run write-producing verification");
   });
 
+  it("requires Builder and Repair to finish local verification before approval", () => {
+    const sharedGuidance = readFileSync(
+      ".agents/skills/issue-delivery/SKILL.md",
+      "utf8",
+    );
+    const repairGuidance = readFileSync(
+      ".agents/skills/issue-delivery/references/repair.md",
+      "utf8",
+    );
+
+    expect(sharedGuidance).toContain(
+      "Do not return `APPROVE` until `pnpm verify` and `pnpm build` both pass",
+    );
+    expect(sharedGuidance).toContain("separate verification entries");
+    expect(repairGuidance).toContain("narrowest reproducible validator");
+  });
+
   it("passes structured Reviewer findings into Repair without tracking pnpm cache files", () => {
     const outcome = workflow(".github/workflows/pr-outcome.yml");
     const collectSteps = outcome.jobs["collect-failure"].steps as Array<{
@@ -243,10 +322,41 @@ describe("delivery workflow stage boundaries", () => {
       "mark-human-required",
       "Stop the bounded Repair loop",
     );
+    const humanRequiredJob = outcome.jobs["mark-human-required"];
+    const humanRequiredCheckout = humanRequiredJob.steps.find(
+      (step: { uses?: string }) =>
+        String(step.uses ?? "").startsWith("actions/checkout@"),
+    );
+    const humanRequiredStep = humanRequiredJob.steps.find(
+      (step: { name?: string }) => step.name === "Stop the bounded Repair loop",
+    );
     expect(stop).toContain('--repo "$GITHUB_REPOSITORY"');
     expect(stop).toContain('FAILURE_KIND" == "evidence-missing"');
     expect(outcome.jobs["mark-human-required"].if as string).toContain(
       "failure_kind == 'evidence-missing'",
+    );
+    expect(classify).toContain('kind="infrastructure-retrying"');
+    expect(outcome.jobs["mark-human-required"].if as string).toContain(
+      "failure_kind == 'configuration'",
+    );
+    expect(outcome.jobs["mark-human-required"].if as string).toContain(
+      "failure_kind == 'infrastructure'",
+    );
+    expect(outcome.jobs["mark-human-required"].if as string).toContain(
+      "needs.collect-failure.result == 'failure'",
+    );
+    expect(outcome.jobs["mark-human-required"].if as string).toContain(
+      "failure_kind != 'infrastructure-retrying'",
+    );
+    expect(stop).toContain('COLLECT_RESULT" == "failure"');
+    expect(stop).toContain("Failure evidence collection failed");
+    expect(stop).toContain('FAILURE_KIND" == "configuration"');
+    expect(stop).toContain('FAILURE_KIND" == "infrastructure"');
+    expect(stop).toContain("scripts/controllers/record-run.mjs");
+    expect(stop).toContain("--state HUMAN_REQUIRED");
+    expect(humanRequiredCheckout?.with?.["persist-credentials"]).toBe(false);
+    expect(humanRequiredStep?.env?.SUPABASE_SERVICE_ROLE_KEY).toContain(
+      "secrets.SUPABASE_SERVICE_ROLE_KEY",
     );
   });
 });

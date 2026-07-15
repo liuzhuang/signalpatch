@@ -284,6 +284,8 @@ pnpm build
 
 `pnpm verify` 固定包含 Prettier Check、ESLint、TypeScript Type Check、Vitest、SQL 校验和 Workflow 校验。失败时先读取真实日志，不要通过放宽测试或策略解决。仓库没有 Required Checks，但自动化仍以这条命令的结果作为内部验收证据。
 
+Builder 和 Repair 在 Codex CLI 内先运行针对性 Validator、`pnpm verify` 和 `pnpm build`。Controller 在生成 Patch 前检查结构化结果：阶段与 Contract 风险必须一致，`decision` 必须为 `APPROVE`，不能保留 P0/P1 finding，两条固定命令必须分别记录为 `passed`，且不能包含 `failed` 或 `not-run`。PR Gate 仍在干净的 Ubuntu Checkout 中独立复跑相同基线；Codex 的自报结果只用于提前阻断已知失败，不能替代 GitHub 复验。Builder 被门禁拒绝时，Controller 同步把 Issue 与网页 Repair Status 更新为 `HUMAN_REQUIRED`。
+
 ### 3. Supabase：创建独立 `signalpatch` Schema
 
 Migration 会创建独立的 `signalpatch` Schema、`feedback`、`problems`、`automation_runs` 三张表、RLS、枚举和两个 RPC；不在 `public` Schema 复制业务表。
@@ -551,10 +553,12 @@ gh run view <run-id> --repo liuzhuang/signalpatch --json status,conclusion,jobs,
 gh run view <run-id> --repo liuzhuang/signalpatch --log-failed
 ```
 
-先区分基础设施失败和应用失败：
+先区分配置、基础设施和应用失败：
 
 - 基础设施失败：同一个失败 Job 最多原样重试一次。
+- 配置失败：缺少仓库脚本时停止业务 Repair，转为 R2 或人工处理。
 - 应用失败：生成 Failure Fingerprint，进入最多三次的有界 Repair。
+- 基础设施重试后仍失败：停止自动代码修改，标记 `ai:human-required`。
 - 相同 Fingerprint 再次出现、没有有效 Diff、越过 `allowedPaths`、修改受保护文件或超过三次：停止 Repair，标记 `ai:human-required`。
 
 ### 2. 未跟踪文件导致 `paths=[]`
@@ -729,13 +733,14 @@ Issue Delivery 不监听普通 `issues.opened`，也不接收 `content:raw` Issu
 
 #### Job 和作用
 
-| Job          | Runner          | 条件                   | 作用                                                                                        |
-| ------------ | --------------- | ---------------------- | ------------------------------------------------------------------------------------------- |
-| `prepare`    | `ubuntu-latest` | 始终                   | 读取 Issue、提取 Issue Contract、校验 Schema、决定 `proceed` 和风险等级                     |
-| `build`      | 自托管 macOS    | `proceed=true` 且非 R3 | 使用 `workspace-write` Builder 修改允许路径；校验模型结果、Diff 和风险；生成 `change.patch` |
-| `analyze-r3` | 自托管 macOS    | 风险为 R3              | 使用 `read-only` Codex 生成分析结果，不修改代码                                             |
-| `publish-r3` | `ubuntu-latest` | R3 分析成功            | 评论分析结果并将 Issue 标记为 `ai:human-required`                                           |
-| `publish`    | `ubuntu-latest` | Builder 成功           | 创建 App Token，应用补丁，提交 AI 分支，推送并创建 Draft PR，记录 Automation Run            |
+| Job                   | Runner          | 条件                   | 作用                                                                                        |
+| --------------------- | --------------- | ---------------------- | ------------------------------------------------------------------------------------------- |
+| `prepare`             | `ubuntu-latest` | 始终                   | 读取 Issue、提取 Issue Contract、校验 Schema、决定 `proceed` 和风险等级                     |
+| `build`               | 自托管 macOS    | `proceed=true` 且非 R3 | 使用 `workspace-write` Builder 修改允许路径；校验模型结果、Diff 和风险；生成 `change.patch` |
+| `analyze-r3`          | 自托管 macOS    | 风险为 R3              | 使用 `read-only` Codex 生成分析结果，不修改代码                                             |
+| `mark-codex-finished` | `ubuntu-latest` | Codex Job 已运行       | 更新 Issue 进度；Builder 失败时把网页 Repair Status 写为 `HUMAN_REQUIRED`                   |
+| `publish-r3`          | `ubuntu-latest` | R3 分析成功            | 评论分析结果并将 Issue 标记为 `ai:human-required`                                           |
+| `publish`             | `ubuntu-latest` | Builder 成功           | 创建 App Token，应用补丁，提交 AI 分支，推送并创建 Draft PR，记录 Automation Run            |
 
 Builder 在生成 Diff 前执行：
 
@@ -837,14 +842,14 @@ on:
 
 #### Job 和作用
 
-| Job                   | Runner          | 条件            | 作用                                                                                                                   |
-| --------------------- | --------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `trust`               | `ubuntu-latest` | 始终            | 从 `workflow_run.pull_requests` 解析唯一 PR；重新验证仓库、分支、作者和 Head SHA；读取风险等级                         |
-| `collect-failure`     | `ubuntu-latest` | Gate 非成功     | 下载失败日志和 Reviewer Artifact，合成 Repair Evidence 与 Fingerprint；分类失败，基础设施首次失败原样重试              |
-| `repair`              | 自托管 macOS    | 应用失败        | 检查 Repair 次数和 Fingerprint；使用 `workspace-write` Codex 生成有界修复；校验 `repair.patch`                         |
-| `publish-repair`      | `ubuntu-latest` | Repair 成功     | 使用 GitHub App Token 把验证后的 Repair Commit 推送到原 PR 分支，记录 Automation Run                                   |
-| `mark-human-required` | `ubuntu-latest` | Repair Job 失败 | 停止自动 Repair，给 Issue 添加 `ai:human-required` 并评论原因                                                          |
-| `finalize`            | `ubuntu-latest` | Gate 成功       | 等待对应 Environment；重新验证 Head；合并；Promote 同一个 Deployment；运行 Production Smoke Test；记录证据并关闭 Issue |
+| Job                   | Runner          | 条件                         | 作用                                                                                                                   |
+| --------------------- | --------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `trust`               | `ubuntu-latest` | 始终                         | 从 `workflow_run.pull_requests` 解析唯一 PR；重新验证仓库、分支、作者和 Head SHA；读取风险等级                         |
+| `collect-failure`     | `ubuntu-latest` | Gate 非成功                  | 下载失败日志和 Reviewer Artifact，合成 Repair Evidence 与 Fingerprint；区分配置、基础设施和应用失败                    |
+| `repair`              | 自托管 macOS    | 应用失败                     | 检查 Repair 次数和 Fingerprint；使用 `workspace-write` Codex 生成有界修复；校验 `repair.patch`                         |
+| `publish-repair`      | `ubuntu-latest` | Repair 成功                  | 使用 GitHub App Token 把验证后的 Repair Commit 推送到原 PR 分支，记录 Automation Run                                   |
+| `mark-human-required` | `ubuntu-latest` | 配置、基础设施或 Repair 失败 | 停止自动处理，给 Issue 添加 `ai:human-required`、评论原因，并把 Repair Status 更新为 `HUMAN_REQUIRED`                  |
+| `finalize`            | `ubuntu-latest` | Gate 成功                    | 等待对应 Environment；重新验证 Head；合并；Promote 同一个 Deployment；运行 Production Smoke Test；记录证据并关闭 Issue |
 
 风险与 Environment 的关系：
 
@@ -1157,6 +1162,7 @@ flowchart TD
   B -->|Gate success| C[finalize]
   B -->|Gate failure| D[collect-failure]
   D -->|首次基础设施故障| E[重跑失败 Job]
+  D -->|配置故障或基础设施重试失败| H[ai:human-required]
   D -->|应用故障| F[有界 Repair]
   F -->|Repair 有效| G[推送新 Head，再触发 PR Gate]
   F -->|预算、策略或补丁失败| H[ai:human-required]
@@ -1167,7 +1173,7 @@ flowchart TD
 `PR Outcome` 的 3 个核心职责是：
 
 1. **Trust**：确认关联到唯一 PR、来源仓库正确、分支符合 `ai/issue-*`、作者是 GitHub App Bot，且 Workflow Run SHA 仍等于 PR 当前 Head SHA。
-2. **失败处理**：下载失败日志，生成 Failure Fingerprint，区分基础设施失败与应用失败，并执行最多 3 次且不能重复相同 Fingerprint 的 Repair。
+2. **失败处理**：下载失败日志，生成 Failure Fingerprint，区分配置、基础设施与应用失败；只有应用失败执行最多 3 次且不能重复相同 Fingerprint 的 Repair。
 3. **成功处理**：按风险等级等待 Environment，合并准确 Head，提升已经验收的 Deployment，执行 Production Smoke Test，记录最终证据并关闭 Issue。
 
 `PR Gate` 回答「当前 PR Head 是否通过验收」，`PR Outcome` 回答「Gate 结束后应当修复、等待人工处理，还是合并并发布」。
