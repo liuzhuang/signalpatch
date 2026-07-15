@@ -65,7 +65,7 @@ export function FeedbackForm() {
         <span className="step">01</span>
         <div>
           <h2>提交 Feedback</h2>
-          <p>简短描述实际体验，系统会附加脱敏运行信息。</p>
+          <p>无需登录，提交后会获得 Tracking ID，可随时查询处理状态。</p>
         </div>
       </div>
       <label htmlFor="feedback">问题或建议</label>
