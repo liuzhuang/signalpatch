@@ -66,6 +66,38 @@
   --footer-link: #d7dbe0;
 }
 
+:root[data-theme="blue"] {
+  --background: #071b33;
+  --foreground: #edf5ff;
+  --muted: #b0c2d8;
+  --line: #24496f;
+  --panel: #0c2948;
+  --accent: #63b3ff;
+  --grid-line: rgba(237, 245, 255, 0.04);
+  --hero-copy: #cad9eb;
+  --input-background: #09233f;
+  --button-foreground: #071b33;
+  --result-background: #09233f;
+  --result-code: #a8d4ff;
+  --footer-link: #d6e8fa;
+}
+
+:root[data-theme="black"] {
+  --background: #000000;
+  --foreground: #f4f6f8;
+  --muted: #a5abb5;
+  --line: #30343a;
+  --panel: #101216;
+  --accent: #ff5c35;
+  --grid-line: rgba(255, 255, 255, 0.03);
+  --hero-copy: #c4c9d0;
+  --input-background: #090a0c;
+  --button-foreground: #150802;
+  --result-background: #090a0c;
+  --result-code: #f6b19f;
+  --footer-link: #e1e4e8;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -267,8 +299,10 @@ button {
 }
 
 .theme-toggle {
+  align-self: center;
   padding: 10px 13px;
   border: 1px solid var(--line);
+  border-radius: 4px;
   background: var(--panel);
   color: var(--foreground);
   font: 600 12px/1 var(--font-mono);

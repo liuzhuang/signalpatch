@@ -40,7 +40,7 @@ test("health endpoint reports the deployed version", async ({ request }) => {
   await expect(response.json()).resolves.toMatchObject({ status: "ok" });
 });
 
-test("homepage follows the system theme and supports an accessible override", async ({
+test("homepage follows the system theme and supports accessible skin selection", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
@@ -52,19 +52,26 @@ test("homepage follows the system theme and supports an accessible override", as
   );
   expect((await page.locator(".hero-copy").textContent())?.trim()).not.toBe("");
 
-  const toggle = page.getByRole("switch");
-  await expect(toggle).toHaveAttribute("aria-checked", "false");
-  await toggle.press("Enter");
-  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  const themeSelector = page.getByLabel("主题皮肤");
+  await expect(themeSelector).toBeVisible();
+  await expect(themeSelector.locator("option")).toHaveText([
+    "跟随系统",
+    "浅色",
+    "深色",
+    "蓝色",
+    "黑色",
+  ]);
+  await themeSelector.selectOption("blue");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "blue");
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(7, 9, 13)",
+    "rgb(7, 27, 51)",
   );
-  await toggle.press("Enter");
-  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await themeSelector.selectOption("black");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "black");
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(246, 247, 248)",
+    "rgb(0, 0, 0)",
   );
 
   await page.emulateMedia({ colorScheme: "dark" });
@@ -73,10 +80,22 @@ test("homepage follows the system theme and supports an accessible override", as
     "background-color",
     "rgb(7, 9, 13)",
   );
-  await expect(page.getByRole("switch")).toHaveAttribute(
-    "aria-checked",
-    "true",
-  );
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme");
+
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(themeSelector).toBeVisible();
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  }
 });
 
 test("homepage links to the mock About page", async ({ page }) => {
