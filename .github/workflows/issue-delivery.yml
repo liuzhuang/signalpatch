@@ -160,13 +160,17 @@ jobs:
             --output-schema .ai/schemas/delivery-output.schema.json \
             --output-last-message .ai/runs/delivery/result.json \
             - < .ai/runs/delivery/prompt.md
-      # validate-diff 对照 Contract 检查路径/风险；change.patch 非空才允许进入 publish Job。
+      # 先拒绝未完成本地门禁的模型结果，再检查 Contract 路径/风险；非空 Patch 才允许发布。
       - name: Enforce paths and risk
         run: |
           # intent-to-add 让未跟踪新文件进入 git diff，否则 allowedPaths 无法约束新增路径。
           git add --intent-to-add -- .
           node scripts/ai/validate-json.mjs \
             .ai/schemas/delivery-output.schema.json \
+            .ai/runs/delivery/result.json
+          node scripts/ai/require-delivery-approval.mjs \
+            build \
+            .ai/runs/delivery/contract.json \
             .ai/runs/delivery/result.json
           node scripts/ai/validate-diff.mjs \
             --base HEAD \
@@ -243,6 +247,12 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+      - name: Download contract for a failed Builder
+        if: needs.build.result != 'success' && needs.build.result != 'skipped'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: issue-${{ needs.prepare.outputs.issue_number }}-contract
+          path: .ai/runs/delivery
       - id: app-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
@@ -261,6 +271,20 @@ jobs:
             result="$ANALYZE_R3_RESULT"
           fi
           node scripts/controllers/issue-progress.mjs end "$ISSUE_NUMBER" "$result"
+      # Builder 没有产出可发布 Patch 时，同步网页 Repair Status；R3 分析仍由 publish-r3 处理。
+      - name: Record failed Builder status
+        if: always() && needs.build.result != 'success' && needs.build.result != 'skipped'
+        env:
+          ISSUE_NUMBER: ${{ needs.prepare.outputs.issue_number }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+        run: |
+          node scripts/controllers/record-run.mjs \
+            --issue "$ISSUE_NUMBER" \
+            --stage build \
+            --state HUMAN_REQUIRED \
+            --head-sha "$GITHUB_SHA" \
+            --contract .ai/runs/delivery/contract.json
 
   # 分析完成后才在隔离 Job 获取 App Token，把结论写回 Issue 并转为人工处理。
   publish-r3:

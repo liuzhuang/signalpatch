@@ -44,7 +44,7 @@ flowchart TD
 
 ## 2. 文件作用清单
 
-共 **24 个文件**（19 个可执行 CLI + 5 个库模块）。
+共 **29 个脚本文件**（24 个可执行 CLI + 5 个库模块）。
 
 ### 2.1 根目录
 
@@ -52,23 +52,25 @@ flowchart TD
 | -------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`run-smoke.mjs`](run-smoke.mjs) | CLI  | 解析 `--base-url`（或 `PLAYWRIGHT_BASE_URL`），用项目锁定的 Playwright CLI 运行 Smoke Test；测试写入的 Tracking ID 供 `cleanup-smoke.mjs` 清理 |
 
-### 2.2 `scripts/ai/`（11 个 CLI + 1 个库）
+### 2.2 `scripts/ai/`（12 个 CLI + 1 个库）
 
-| 文件                                                    | 类型   | 作用                                                                                                               |
-| ------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
-| [`bundle-schema.mjs`](ai/bundle-schema.mjs)             | CLI    | 递归内联 JSON Schema 中与目标 `$id` 匹配的 `$ref`，生成 Codex CLI 可用的单文件 output-schema                       |
-| [`render-prompt.mjs`](ai/render-prompt.mjs)             | CLI    | 按 `--stage`（intake / build / review / repair）组装 Prompt：`AGENTS.md` + Skill + 阶段参考 + Contract / 证据      |
-| [`validate-json.mjs`](ai/validate-json.mjs)             | CLI    | 用 Ajv 校验 JSON 是否符合指定 Schema（Intake 输出、Delivery 输出、Issue Contract 等）                              |
-| [`validate-diff.mjs`](ai/validate-diff.mjs)             | CLI    | 检查相对基准 ref 的 git diff：路径是否在 Contract `allowedPaths`、是否触碰保护路径、实际风险是否高于 Contract 声明 |
-| [`validate-sql.mjs`](ai/validate-sql.mjs)               | CLI    | 确认 signalpatch Schema 迁移包含必需表、RLS、安全函数与匿名 RPC；拒绝在 public 建业务表或向 anon 整库授权          |
-| [`validate-workflows.mjs`](ai/validate-workflows.mjs)   | CLI    | 校验 `.github/workflows/*.yml` 的 YAML 结构与安全规则（Codex 凭据隔离、Action pin SHA、禁止 broad permissions 等） |
-| [`evaluate-risk.mjs`](ai/evaluate-risk.mjs)             | CLI    | 根据路径列表文件与 [`.ai/policy.yaml`](../.ai/policy.yaml) 计算最终风险等级（只能上调，不能降级）                  |
-| [`check-repair-budget.mjs`](ai/check-repair-budget.mjs) | CLI    | 检查 Repair 尝试编号是否在 1–3、是否重复 Failure Fingerprint、是否有有效修改                                       |
-| [`failure-fingerprint.mjs`](ai/failure-fingerprint.mjs) | CLI    | 从 stdin 读取失败日志，规范化后输出 SHA256 指纹与截断摘要                                                          |
-| [`classify-failure.mjs`](ai/classify-failure.mjs)       | CLI    | 将失败日志分为 `infrastructure`（Runner/网络等）或 `application`（业务/测试失败）                                  |
-| [`lib/policy.mjs`](ai/lib/policy.mjs)                   | **库** | 加载 policy YAML；glob 转正则；`requiredRisk`、`policyViolations`、`matchesAny`                                    |
+| 文件                                                                | 类型   | 作用                                                                                                               |
+| ------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| [`bundle-schema.mjs`](ai/bundle-schema.mjs)                         | CLI    | 递归内联 JSON Schema 中与目标 `$id` 匹配的 `$ref`，生成 Codex CLI 可用的单文件 output-schema                       |
+| [`render-prompt.mjs`](ai/render-prompt.mjs)                         | CLI    | 按 `--stage`（intake / build / review / repair）组装 Prompt：`AGENTS.md` + Skill + 阶段参考 + Contract / 证据      |
+| [`validate-json.mjs`](ai/validate-json.mjs)                         | CLI    | 用 Ajv 校验 JSON 是否符合指定 Schema（Intake 输出、Delivery 输出、Issue Contract 等）                              |
+| [`validate-diff.mjs`](ai/validate-diff.mjs)                         | CLI    | 检查相对基准 ref 的 git diff：路径是否在 Contract `allowedPaths`、是否触碰保护路径、实际风险是否高于 Contract 声明 |
+| [`validate-sql.mjs`](ai/validate-sql.mjs)                           | CLI    | 确认 signalpatch Schema 迁移包含必需表、RLS、安全函数与匿名 RPC；拒绝在 public 建业务表或向 anon 整库授权          |
+| [`validate-workflows.mjs`](ai/validate-workflows.mjs)               | CLI    | 校验 `.github/workflows/*.yml` 的 YAML 结构与安全规则（Codex 凭据隔离、Action pin SHA、禁止 broad permissions 等） |
+| [`evaluate-risk.mjs`](ai/evaluate-risk.mjs)                         | CLI    | 根据路径列表文件与 [`.ai/policy.yaml`](../.ai/policy.yaml) 计算最终风险等级（只能上调，不能降级）                  |
+| [`check-repair-budget.mjs`](ai/check-repair-budget.mjs)             | CLI    | 检查 Repair 尝试编号是否在 1–3、是否重复 Failure Fingerprint、是否有有效修改                                       |
+| [`failure-fingerprint.mjs`](ai/failure-fingerprint.mjs)             | CLI    | 从 stdin 读取失败日志，规范化后输出 SHA256 指纹与截断摘要                                                          |
+| [`classify-failure.mjs`](ai/classify-failure.mjs)                   | CLI    | 将失败日志分为 `configuration`（缺失脚本）、`infrastructure`（Runner/网络）或 `application`（业务/测试失败）       |
+| [`compose-repair-evidence.mjs`](ai/compose-repair-evidence.mjs)     | CLI    | 合并 Gate 失败日志、失败指纹与独立 Reviewer 证据，生成 Repair 使用的最小证据                                       |
+| [`require-delivery-approval.mjs`](ai/require-delivery-approval.mjs) | CLI    | 发布 Patch 前绑定阶段与 Contract 风险，拒绝 P0/P1 finding，并要求 `APPROVE`、`pnpm verify` 和 `pnpm build` 通过    |
+| [`lib/policy.mjs`](ai/lib/policy.mjs)                               | **库** | 加载 policy YAML；glob 转正则；`requiredRisk`、`policyViolations`、`matchesAny`                                    |
 
-### 2.3 `scripts/controllers/`（11 个 CLI + 3 个库）
+### 2.3 `scripts/controllers/`（11 个 CLI + 4 个库）
 
 | 文件                                                                             | 类型   | 作用                                                                                                          |
 | -------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
@@ -103,6 +105,7 @@ flowchart TD
 | `bundle-schema.mjs`               | Feedback Intake Workflow              | `qualify` Job，Codex 调用前                                                              | GitHub Actions                                        |
 | `render-prompt.mjs`               | 多个 Workflow                         | Intake / Builder / Reviewer / Repair（`--stage` 不同）                                   | Feedback Intake、Issue Delivery、PR Gate、PR Outcome  |
 | `validate-json.mjs`               | 多个 Workflow                         | Codex 输出后、Contract 提取后                                                            | 同上                                                  |
+| `require-delivery-approval.mjs`   | Issue Delivery / PR Outcome           | Builder/Repair 输出通过 Schema 后、patch 路径与风险校验前                                | GitHub Actions                                        |
 | `intake-publish.mjs`              | Feedback Intake Workflow              | `publish` Job                                                                            | GitHub Actions                                        |
 | `enqueue-conversation-issue.mjs`  | Codex（AGENTS.md 授权）               | Issue Intake 确认 Contract 后，先尝试 `gh` 直接发布，无权限时本地 `workspace-write` 入队 | Codex CLI / 开发者手动                                |
 | `publish-conversation-issues.mjs` | Publish Conversation Issues Workflow  | cron 每 5 分钟 / `workflow_dispatch`                                                     | GitHub Actions；亦可本地见 [README.md](../README.md)  |
@@ -111,6 +114,7 @@ flowchart TD
 | `check-repair-budget.mjs`         | PR Outcome Workflow                   | `repair` Job，调用 Codex 前                                                              | GitHub Actions                                        |
 | `failure-fingerprint.mjs`         | PR Outcome Workflow                   | `collect-failure` Job                                                                    | GitHub Actions                                        |
 | `classify-failure.mjs`            | PR Outcome Workflow                   | `collect-failure` Job                                                                    | GitHub Actions                                        |
+| `compose-repair-evidence.mjs`     | PR Outcome Workflow                   | `collect-failure` Job，将日志分类与独立 Reviewer 证据合并                                | GitHub Actions                                        |
 | `record-run.mjs`                  | Issue Delivery / PR Gate / PR Outcome | build 成功、preview 成功、repair 成功、production 成功或失败                             | GitHub Actions                                        |
 | `final-comment.mjs`               | PR Outcome Workflow                   | `finalize` Job，Production Smoke 通过后                                                  | GitHub Actions                                        |
 | `cleanup-smoke.mjs`               | PR Outcome / Runbook                  | Production Smoke 后；运维人工清理                                                        | GitHub Actions；[docs/runbook.md](../docs/runbook.md) |
@@ -129,17 +133,18 @@ flowchart TD
 | **Feedback Intake**             | `publish`                     | `intake-publish.mjs`                                                                                                                   |
 | **Publish Conversation Issues** | `publish`                     | `publish-conversation-issues.mjs` — 详见 [publish-conversation-issues.yml.md](../.github/workflows/publish-conversation-issues.yml.md) |
 | **Issue Delivery**              | `prepare`                     | `prepare-issue.mjs`, `validate-json.mjs` — 详见 [issue-delivery.yml.md](../.github/workflows/issue-delivery.yml.md)                    |
-| **Issue Delivery**              | `mark-codex-started/finished` | `issue-progress.mjs`                                                                                                                   |
-| **Issue Delivery**              | `build`                       | `render-prompt.mjs`, `validate-json.mjs`, `validate-diff.mjs`                                                                          |
+| **Issue Delivery**              | `mark-codex-started/finished` | `issue-progress.mjs`；Builder 失败时由 `record-run.mjs` 写入 `HUMAN_REQUIRED`                                                          |
+| **Issue Delivery**              | `build`                       | `render-prompt.mjs`, `validate-json.mjs`, `require-delivery-approval.mjs`, `validate-diff.mjs`                                         |
 | **Issue Delivery**              | `analyze-r3`                  | `render-prompt.mjs`, `validate-json.mjs`                                                                                               |
 | **Issue Delivery**              | `publish`                     | `validate-diff.mjs`, `record-run.mjs`                                                                                                  |
 | **PR Gate**                     | `trust`                       | `prepare-issue.mjs` — 详见 [pr-gate.yml.md](../.github/workflows/pr-gate.yml.md)                                                       |
 | **PR Gate**                     | `independent-review`          | `render-prompt.mjs`, `validate-json.mjs`                                                                                               |
 | **PR Gate**                     | `preview-smoke`               | `record-run.mjs`, `run-smoke.mjs`（经 `pnpm test:smoke`）                                                                              |
 | **PR Outcome**                  | `trust`                       | `prepare-issue.mjs` — 详见 [pr-outcome.yml.md](../.github/workflows/pr-outcome.yml.md)                                                 |
-| **PR Outcome**                  | `collect-failure`             | `failure-fingerprint.mjs`, `classify-failure.mjs`                                                                                      |
-| **PR Outcome**                  | `repair`                      | `check-repair-budget.mjs`, `render-prompt.mjs`, `validate-json.mjs`, `validate-diff.mjs`                                               |
+| **PR Outcome**                  | `collect-failure`             | `failure-fingerprint.mjs`, `classify-failure.mjs`, `compose-repair-evidence.mjs`                                                       |
+| **PR Outcome**                  | `repair`                      | `check-repair-budget.mjs`, `render-prompt.mjs`, `validate-json.mjs`, `require-delivery-approval.mjs`, `validate-diff.mjs`              |
 | **PR Outcome**                  | `publish-repair`              | `validate-diff.mjs`, `record-run.mjs`                                                                                                  |
+| **PR Outcome**                  | `mark-human-required`         | `record-run.mjs`                                                                                                                       |
 | **PR Outcome**                  | `finalize`                    | `record-run.mjs`, `cleanup-smoke.mjs`, `final-comment.mjs`, `run-smoke.mjs`（经 `pnpm test:smoke`）                                    |
 
 ### 3.3 pnpm 命令映射

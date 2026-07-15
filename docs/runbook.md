@@ -86,6 +86,10 @@ R1 全部通过后应自动：
 
 首次基础设施失败由 Workflow 原样重试失败 Job。第二次仍失败时停止自动代码修改，检查 Runner 在线状态、Vercel/Supabase 可用性和 Secret 是否过期。
 
+### 配置失败
+
+日志出现缺少 `pnpm` 脚本时，Workflow 不进入业务 Repair，直接标记 `ai:human-required`，并把 Repair Status 更新为 `HUMAN_REQUIRED`。修复 `package.json`、Workflow 或其他受保护配置前，需要使用 R2 Issue Contract 并经过人工批准。
+
 ### 应用失败
 
 允许最多三次 Repair。不要手动扩大 Issue Contract 的 `allowedPaths` 来绕过策略；需要扩大范围时，新建或更新 Issue Contract，并重新评估风险。

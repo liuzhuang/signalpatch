@@ -33,6 +33,8 @@ Work only from a validated Issue Contract and controller-provided evidence. Neve
 6. Never weaken or delete a test to satisfy a failing gate.
 7. Return JSON matching `.ai/schemas/delivery-output.schema.json`.
 8. Do not commit, push, comment, merge, deploy, or access credentials.
+9. Builder and Repair: Do not return `APPROVE` until `pnpm verify` and `pnpm build` both pass. Keep fixing and rerunning them in the same Codex execution unless a stop condition applies, and report the exact commands as separate verification entries. Report only checks executed in this stage; Preview and Production validators belong to their later Controller jobs and must not be listed as `not-run`.
+10. An `APPROVE` result must name the current stage, keep the Issue Contract risk level unchanged, and contain no P0 or P1 finding. Use `HUMAN_REQUIRED` instead when the risk must increase or a blocking finding remains.
 
 ## Stop conditions
 

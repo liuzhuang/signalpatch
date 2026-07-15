@@ -156,22 +156,25 @@ Supabase → collect → qualify → publish → GitHub Issue → issue-delivery
 | **从哪来**      | 已有 GitHub Issue；Feedback/Codex Contract 位于可信发布者写入的正文，Manual Contract 位于 App Bot 专用评论                                                          |
 | **产出什么**    | 分支 `ai/issue-{编号}-delivery` + **Draft PR**（非 Ready PR；见 [详述 § Draft PR](issue-delivery.yml.md#draft-pr-与普通-pr-的区别)）；PR 创建后会触发 `pr-gate.yml` |
 | **特殊情况 R3** | 风险太高 → **不改代码**，Issue 评论 + 转 `ai:human-required`                                                                                                        |
-| **详细文档**    | [issue-delivery.yml.md](issue-delivery.yml.md)（5 Job、proceed 防双跑、prepare/record-run/validate-diff 脚本详述）                                                  |
+| **详细文档**    | [issue-delivery.yml.md](issue-delivery.yml.md)（7 Job、proceed 防双跑、进度终态、prepare/record-run/validate-diff 脚本详述）                                        |
 
-五个 Job 一览：
+七个 Job 一览：
 
-| Job            | 用途                                       | 主要输入                   | 主要输出                                   |
-| -------------- | ------------------------------------------ | -------------------------- | ------------------------------------------ |
-| **prepare**    | 提取 Contract、算 `proceed` / `risk_level` | GitHub Issue               | Job outputs；Artifact `issue-{n}-contract` |
-| **build**      | Codex 改码 + policy 校验 + patch           | Contract Artifact          | Artifact `issue-{n}-build`                 |
-| **analyze-r3** | R3 只读分析                                | Contract Artifact          | Artifact `issue-{n}-r3-analysis`           |
-| **publish**    | 推分支、Draft PR、record-run               | contract + build Artifacts | PR；Supabase Automation Run                |
-| **publish-r3** | R3 结论写 Issue                            | r3-analysis Artifact       | Issue 评论；标签转人工                     |
+| Job                     | 用途                                          | 主要输入                   | 主要输出                                   |
+| ----------------------- | --------------------------------------------- | -------------------------- | ------------------------------------------ |
+| **prepare**             | 提取 Contract、算 `proceed` / `risk_level`    | GitHub Issue               | Job outputs；Artifact `issue-{n}-contract` |
+| **mark-codex-started**  | 认领修订，写 Codex 开始时间                   | prepare outputs            | Issue `ai:building`                        |
+| **build**               | Codex 改码 + policy 校验 + patch              | Contract Artifact          | Artifact `issue-{n}-build`                 |
+| **analyze-r3**          | R3 只读分析                                   | Contract Artifact          | Artifact `issue-{n}-r3-analysis`           |
+| **mark-codex-finished** | 写结束时间；Builder 失败同步 Issue 与网页终态 | Codex Job result           | `ai:verifying` 或 `HUMAN_REQUIRED`         |
+| **publish**             | 推分支、Draft PR、record-run                  | contract + build Artifacts | PR；Supabase Automation Run                |
+| **publish-r3**          | R3 结论写 Issue                               | r3-analysis Artifact       | Issue 评论；标签转人工                     |
 
 ```text
-Issue → prepare → build → publish → Draft PR → pr-gate.yml
-              │      └── analyze-r3 → publish-r3（R3，无 PR）
-              └── 仅接受 content:processed Issue
+Issue → prepare → mark-codex-started → build / analyze-r3 → mark-codex-finished
+      → build 成功 → publish → Draft PR → pr-gate.yml
+      → R3 分析成功 → publish-r3（无 PR）
+      → Builder 失败 → Issue + 网页 HUMAN_REQUIRED
 ```
 
 **proceed**：Delivery 只接受 `content:processed` Issue。raw Issue 不会启动 Builder；带有效 Contract 的手动 Issue 添加该标签后也可进入。
@@ -218,30 +221,33 @@ Draft PR → trust → verify ∥ build → independent-review（二选一）→
 
 **一句话**：等 `pr-gate.yml` **整轮跑完**后触发；全绿就合并上生产，红了就试着让 AI 修（有次数上限）。
 
-| 项目            | 说明                                                                                                         |
-| --------------- | ------------------------------------------------------------------------------------------------------------ |
-| **什么时候跑**  | `PR Gate` 这一 workflow **结束**时（成功或失败都会触发，内部再分支）                                         |
-| **Gate 成功时** | 合并 PR → 把 Gate 里测过的那个预览部署**提升为生产** → 再跑一遍生产 Smoke → **关闭 Issue**                   |
-| **Gate 失败时** | 若是 Runner/网络问题 → 自动重跑 Gate；若是测试/代码问题 → AI 修一次 PR，再触发新一轮 Gate（**最多约 3 轮**） |
-| **修不动了**    | 给 Issue 打 `ai:human-required`，等人接手                                                                    |
-| **详细文档**    | [pr-outcome.yml.md](pr-outcome.yml.md)（6 Job、Repair 边界、finalize / promote 详述）                        |
+| 项目            | 说明                                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------------- |
+| **什么时候跑**  | `PR Gate` 这一 workflow **结束**时（成功或失败都会触发，内部再分支）                                          |
+| **Gate 成功时** | 合并 PR → 把 Gate 里测过的那个预览部署**提升为生产** → 再跑一遍生产 Smoke → **关闭 Issue**                    |
+| **Gate 失败时** | 配置缺失直接转人工；Runner/网络问题只重跑一次；测试/代码问题由 AI 修 PR，再触发新一轮 Gate（**最多约 3 轮**） |
+| **修不动了**    | 给 Issue 打 `ai:human-required`，并把网页 Repair Status 更新为 `HUMAN_REQUIRED`                               |
+| **详细文档**    | [pr-outcome.yml.md](pr-outcome.yml.md)（6 Job、Repair 边界、finalize / promote 详述）                         |
 
 六个 Job 一览：
 
 | Job                     | 用途                                           | 主要输入         | 主要输出                                               |
 | ----------------------- | ---------------------------------------------- | ---------------- | ------------------------------------------------------ |
 | **trust**               | 重验 PR、定 `mode` / `conclusion`、拉 Contract | `workflow_run`   | Job outputs；Artifact `outcome-contract`（automation） |
-| **collect-failure**     | 失败日志、指纹、基础设施/应用分类              | Gate 失败        | Artifact `failure-evidence`；可能 `gh run rerun`       |
+| **collect-failure**     | 失败日志、指纹、配置/基础设施/应用分类         | Gate 失败        | Artifact `failure-evidence`；可能 `gh run rerun`       |
 | **repair**              | Codex 有界 Repair                              | application 失败 | Artifact `repair-patch`                                |
 | **publish-repair**      | 应用 patch、push 分支                          | repair 成功      | 新 commit → 新一轮 PR Gate                             |
-| **mark-human-required** | Repair 失败转人工                              | repair 失败      | Issue `ai:human-required`                              |
+| **mark-human-required** | 配置、基础设施终态或 Repair 失败转人工         | 自动处理停止     | Issue 与网页均为 `HUMAN_REQUIRED`                      |
 | **finalize**            | 合并、promote、Production Smoke、关 Issue      | Gate 成功        | 生产验收、Issue 关闭                                   |
 
 ```text
 PR Gate completed (workflow_run)
   → trust
   → automation + success → finalize（R2 须 r2-approval）
-  → automation + failure → collect-failure → infrastructure 重跑 Gate 或 application → repair → publish-repair
+  → automation + failure → collect-failure
+      → configuration / infrastructure 重试失败 → HUMAN_REQUIRED
+      → infrastructure 首次失败 → 重跑 Gate
+      → application → repair → publish-repair
   → manual codex/* → trust 成功即结束（不合并、不 Repair）
 ```
 

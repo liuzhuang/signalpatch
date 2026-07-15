@@ -26,10 +26,11 @@ flowchart LR
   PRE --> MARK[mark-codex-started\nIssue: ai:building + 开始时间]
   MARK -->|proceed + R0-R2| BLD
   MARK -->|proceed + R3| R3
-  BLD --> END[mark-codex-finished\n结束时间 + ai:verifying]
+  BLD --> END[mark-codex-finished\n结束时间 + Issue 状态]
   R3 --> END
-  END --> PUB --> PR
-  END --> R3P
+  END -->|Builder success| PUB --> PR
+  END -->|R3 analysis success| R3P
+  END -->|Builder failed| HUMAN[ai:human-required + 网页 HUMAN_REQUIRED]
   PRE -->|proceed false| SKIP[跳过 build 与 R3]
 ```
 
@@ -53,7 +54,7 @@ flowchart LR
 | **mark-codex-started**  | `ubuntu-latest` | Issue 标记 `ai:building`，写入 Codex 开始时间                      | `prepare` 未通过                        |
 | **build**               | 自托管 macOS    | Codex **改代码**，policy 校验，生成 patch                          | `proceed != true` 或 `risk_level == R3` |
 | **analyze-r3**          | 自托管 macOS    | Codex **只读**分析 R3 Issue                                        | `proceed != true` 或 `risk_level != R3` |
-| **mark-codex-finished** | `ubuntu-latest` | 写入 Codex 结束时间，成功转 `ai:verifying`，失败转人工             | Codex Job 未运行                        |
+| **mark-codex-finished** | `ubuntu-latest` | 写结束时间；Builder 失败同步 Issue 与网页的人工终态                | Codex Job 未运行                        |
 | **publish**             | `ubuntu-latest` | 应用 patch、推分支、开 Draft PR、`record-run`                      | `build` 未运行或失败                    |
 | **publish-r3**          | `ubuntu-latest` | Issue 评论 + 转人工标签                                            | `analyze-r3` 未运行或失败               |
 
@@ -196,9 +197,10 @@ node scripts/ai/validate-json.mjs \
 
 1. `mark-codex-started` 在 Builder 或 R3 分析启动前，把标签切到 `ai:building`，并在固定的进度评论写入 UTC 开始时间。
 2. `mark-codex-finished` 在 Codex Job 结束后更新同一条评论的 UTC 结束时间；成功切到 `ai:verifying`，失败切到 `ai:human-required`。
-3. 评论使用 `<!-- signalpatch-delivery-progress -->` 标记并原地更新，不为每个步骤追加评论。
+3. Builder 非成功时，该 Job 下载同一份 Contract，并调用 `record-run.mjs --stage build --state HUMAN_REQUIRED`。Feedback 网页的 Repair Status 因而不会停在旧状态；尚无 Problem 的手工或对话入口可由 Contract 补建。
+4. 评论使用 `<!-- signalpatch-delivery-progress -->` 标记并原地更新，不为每个步骤追加评论。
 
-两个 Job 均使用 GitHub App Token；Codex 进程不会接收 GitHub 写凭据。
+两个 Job 均使用 GitHub App Token；`mark-codex-finished` 仅在 Builder 失败分支使用 Supabase Service Role。凭据都留在 Controller Job，Codex 进程不会接收。
 
 ---
 
@@ -216,11 +218,12 @@ flowchart TD
   prompt[render-prompt --stage build]
   codex[Codex workspace-write]
   vjson[validate-json result.json]
+  approval[require-delivery-approval]
   vdiff[validate-diff.mjs]
   patch[git diff 写 change.patch]
   up[上传 issue-n-build]
 
-  dl --> prompt --> codex --> vjson --> vdiff --> patch --> up
+  dl --> prompt --> codex --> vjson --> approval --> vdiff --> patch --> up
 ```
 
 **1. 渲染 Builder Prompt**
@@ -251,6 +254,10 @@ git add --intent-to-add -- .
 node scripts/ai/validate-json.mjs \
   .ai/schemas/delivery-output.schema.json \
   .ai/runs/delivery/result.json
+node scripts/ai/require-delivery-approval.mjs \
+  build \
+  .ai/runs/delivery/contract.json \
+  .ai/runs/delivery/result.json
 node scripts/ai/validate-diff.mjs \
   --base HEAD \
   --contract .ai/runs/delivery/contract.json
@@ -259,6 +266,7 @@ test -s .ai/runs/delivery/change.patch
 ```
 
 - **`git add --intent-to-add`**：让**新文件**出现在 diff 中，避免绕过 `allowedPaths` 检查。
+- **`require-delivery-approval`**：阶段必须是 `build`，风险必须与 Contract 相同，`decision` 必须是 `APPROVE`，不能保留 P0/P1 finding、`failed` 或 `not-run`，且精确的 `pnpm verify`、`pnpm build` 都必须报告为 `passed`。
 - **`test -s change.patch`**：patch 必须非空，否则 build 失败。
 
 #### validate-diff.mjs 说明
