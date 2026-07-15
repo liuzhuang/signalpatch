@@ -75,7 +75,9 @@ export function StatusForm() {
         <div className="result" aria-live="polite">
           <span>Repair Status</span>
           <strong>{result.repairStatus}</strong>
-          <small>{new Date(result.updatedAt).toLocaleString("zh-CN")}</small>
+          <small>
+            更新时间：{new Date(result.updatedAt).toLocaleString("zh-CN")}
+          </small>
         </div>
       ) : null}
     </form>
