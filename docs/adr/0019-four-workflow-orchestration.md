@@ -1,4 +1,4 @@
-# 使用四个 Workflow 串联完整生命周期
+# 使用分层 Workflow 串联完整生命周期
 
 SignalPatch 使用 `feedback-intake.yml`、`manual-issue-intake.yml`、`issue-delivery.yml`、`pr-gate.yml` 和 `pr-outcome.yml`，并由 `publish-conversation-issues.yml` 接入本地 Codex 队列。Feedback 与 Codex 对话入口创建 raw Issue；手动入口由 Issue 和用户评论事件触发，并原地更新当前 raw Issue；所有入口达到 `SPEC_READY` 后晋升为 processed Issue，`content:processed` 标签事件统一启动 Delivery。Delivery 创建 Draft PR；PR Gate 执行验证、独立审查、Preview 和验收；PR Outcome 仅通过一层 `workflow_run` 在失败时修复、成功时合并和发布。
 

@@ -194,4 +194,4 @@ self-hosted, macOS, ARM64, signalpatch
 - Vercel 初始 Production Deployment 的 `/health` 返回成功。
 - GitHub App、Variables、Secrets、Labels 和 Environments 都已配置；Rulesets 与 Branch protection rules 均为空。
 - 专用 Runner 在线且显示四个预期 Label。
-- 五条 Workflow 可被 GitHub 解析，并至少完成一次真实闭环。
+- 六条 Workflow 可被 GitHub 解析，并至少完成一次真实闭环。
