@@ -78,6 +78,13 @@ export function FeedbackForm() {
         rows={6}
         value={message}
       />
+      <output
+        aria-label="Feedback 字数"
+        className="character-count"
+        htmlFor="feedback"
+      >
+        {message.length} / 2000
+      </output>
       <button disabled={submitting} type="submit">
         {submitting ? "正在提交" : "获取 Tracking ID"}
       </button>
