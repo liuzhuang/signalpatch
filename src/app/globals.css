@@ -110,12 +110,13 @@ footer {
 .hero {
   padding: 96px 0 64px;
   border-bottom: 1px solid var(--line);
+  text-align: center;
 }
 
 .hero-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 16px;
 }
 
@@ -150,7 +151,7 @@ h1 span {
 
 .hero-copy {
   max-width: 660px;
-  margin: 28px 0 36px;
+  margin: 28px auto 36px;
   color: var(--hero-copy);
   font-size: 18px;
   line-height: 1.7;
@@ -161,6 +162,7 @@ h1 span {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+  justify-content: center;
   font: 500 12px/1 var(--font-mono);
 }
 
@@ -192,10 +194,12 @@ h1 span {
   min-height: 500px;
   padding: clamp(28px, 5vw, 52px);
   background: var(--panel);
+  text-align: center;
 }
 
 .panel-heading {
   display: flex;
+  justify-content: center;
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -233,6 +237,7 @@ textarea {
   background: var(--input-background);
   color: var(--foreground);
   font: 15px/1.6 var(--font-sans);
+  text-align: left;
   outline: none;
   resize: vertical;
 }
@@ -244,7 +249,7 @@ textarea:focus {
 }
 
 button {
-  align-self: flex-start;
+  align-self: center;
   border: 0;
   border-radius: 4px;
   padding: 13px 18px;
@@ -297,14 +302,16 @@ button:disabled {
 
 footer {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 24px;
   padding: 32px 0 48px;
   color: var(--muted);
   font-size: 12px;
+  text-align: center;
 }
 
 footer a {
-  margin-left: auto;
   color: var(--footer-link);
   text-decoration: none;
 }
@@ -323,11 +330,8 @@ footer a {
   }
 
   footer {
+    align-items: center;
     flex-direction: column;
     gap: 10px;
-  }
-
-  footer a {
-    margin-left: 0;
   }
 }
