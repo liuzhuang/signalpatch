@@ -207,9 +207,11 @@ jobs:
             > .ai/runs/outcome/repair-prompt.md
       - name: Repair with Codex
         run: |
+          # pnpm 11 不应在无网络 Sandbox 中重新校验并安装前一步已经准备好的依赖。
           env -i \
             HOME="$HOME" \
             PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+            pnpm_config_verify_deps_before_run=false \
             /Applications/ChatGPT.app/Contents/Resources/codex exec \
             --ephemeral \
             --sandbox workspace-write \

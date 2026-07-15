@@ -13,14 +13,13 @@ function deliveryResult(overrides = {}) {
     findings: [],
     verification: [
       { command: "pnpm verify", status: "passed", detail: "green" },
-      { command: "pnpm build", status: "passed", detail: "green" },
     ],
     ...overrides,
   };
 }
 
 describe("assertPublishableDeliveryResult", () => {
-  it("accepts an approved build result after verify and build pass", async () => {
+  it("accepts an approved build result after verify passes", async () => {
     const result = deliveryResult();
 
     await expect(
@@ -92,7 +91,6 @@ describe("assertPublishableDeliveryResult", () => {
         deliveryResult({
           verification: [
             { command: "pnpm verify", status: "passed" },
-            { command: "pnpm build", status: "passed" },
             { command: "pnpm test", status: "failed" },
           ],
         }),
@@ -109,7 +107,6 @@ describe("assertPublishableDeliveryResult", () => {
         deliveryResult({
           verification: [
             { command: "pnpm verify", status: "passed" },
-            { command: "pnpm build", status: "passed" },
             { command: "pnpm test:smoke", status: "not-run" },
           ],
         }),
@@ -126,14 +123,7 @@ describe("assertPublishableDeliveryResult", () => {
       missing: "pnpm verify",
     },
     {
-      verification: [{ command: "pnpm verify", status: "passed" }],
-      missing: "pnpm build",
-    },
-    {
-      verification: [
-        { command: "pnpm verify --filter app", status: "passed" },
-        { command: "pnpm build", status: "passed" },
-      ],
+      verification: [{ command: "pnpm verify --filter app", status: "passed" }],
       missing: "pnpm verify",
     },
   ])(

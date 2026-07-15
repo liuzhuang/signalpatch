@@ -284,7 +284,7 @@ pnpm build
 
 `pnpm verify` 固定包含 Prettier Check、ESLint、TypeScript Type Check、Vitest、SQL 校验和 Workflow 校验。失败时先读取真实日志，不要通过放宽测试或策略解决。仓库没有 Required Checks，但自动化仍以这条命令的结果作为内部验收证据。
 
-Builder 和 Repair 在 Codex CLI 内先运行针对性 Validator、`pnpm verify` 和 `pnpm build`。Controller 在生成 Patch 前检查结构化结果：阶段与 Contract 风险必须一致，`decision` 必须为 `APPROVE`，不能保留 P0/P1 finding，两条固定命令必须分别记录为 `passed`，且不能包含 `failed` 或 `not-run`。PR Gate 仍在干净的 Ubuntu Checkout 中独立复跑相同基线；Codex 的自报结果只用于提前阻断已知失败，不能替代 GitHub 复验。Builder 被门禁拒绝时，Controller 同步把 Issue 与网页 Repair Status 更新为 `HUMAN_REQUIRED`。
+Builder 和 Repair 在 Codex CLI 内先运行不依赖本地服务、浏览器或 Sandbox 网络的针对性 Validator，以及 `pnpm verify`。Controller 在生成 Patch 前检查结构化结果：阶段与 Contract 风险必须一致，`decision` 必须为 `APPROVE`，不能保留 P0/P1 finding，精确的 `pnpm verify` 必须记录为 `passed`，且不能包含 `failed` 或 `not-run`。Codex Sandbox 不运行 `pnpm build`，也不启动本地服务或浏览器；Builder 与 Repair 进程设置 `pnpm_config_verify_deps_before_run=false`，复用 Workflow 已安装的依赖，避免 pnpm 在无网络 Sandbox 中自行重装。PR Gate 在干净的 Ubuntu Checkout 中独立执行 `pnpm verify`、`pnpm build` 和 Preview Smoke，PR Outcome 再执行 Production Smoke。Codex 的自报结果只用于提前阻断已知失败，不能替代 GitHub 复验。Builder 被门禁拒绝时，Controller 同步把 Issue 与网页 Repair Status 更新为 `HUMAN_REQUIRED`。
 
 ### 3. Supabase：创建独立 `signalpatch` Schema
 

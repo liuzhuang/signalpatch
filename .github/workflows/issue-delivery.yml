@@ -151,16 +151,18 @@ jobs:
       # workspace-write：Codex 可改仓库文件，但 env -i 阻断 GH/Supabase/Vercel 凭据。
       - name: Build with Codex
         run: |
+          # pnpm 11 不应在无网络 Sandbox 中重新校验并安装前一步已经准备好的依赖。
           env -i \
             HOME="$HOME" \
             PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+            pnpm_config_verify_deps_before_run=false \
             /Applications/ChatGPT.app/Contents/Resources/codex exec \
             --ephemeral \
             --sandbox workspace-write \
             --output-schema .ai/schemas/delivery-output.schema.json \
             --output-last-message .ai/runs/delivery/result.json \
             - < .ai/runs/delivery/prompt.md
-      # 先拒绝未完成本地门禁的模型结果，再检查 Contract 路径/风险；非空 Patch 才允许发布。
+      # Codex 预检只接受 pnpm verify 通过且无失败项；build 与浏览器验收由干净的 PR Gate 负责。
       - name: Enforce paths and risk
         run: |
           # intent-to-add 让未跟踪新文件进入 git diff，否则 allowedPaths 无法约束新增路径。

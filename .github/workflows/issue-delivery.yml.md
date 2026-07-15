@@ -240,12 +240,12 @@ node scripts/ai/render-prompt.mjs \
 
 **2. Codex Builder**
 
-| 项目            | 值                                                                           |
-| --------------- | ---------------------------------------------------------------------------- |
-| **沙箱**        | `workspace-write`（可改工作区文件）                                          |
-| **环境**        | `env -i` + `HOME` / `PATH`（无 GitHub、Supabase、Vercel 变量）               |
-| **输出 Schema** | [delivery-output.schema.json](../../.ai/schemas/delivery-output.schema.json) |
-| **输出文件**    | `.ai/runs/delivery/result.json`                                              |
+| 项目            | 值                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| **沙箱**        | `workspace-write`（可改工作区文件）                                                                         |
+| **环境**        | `env -i` + `HOME` / `PATH` + `pnpm_config_verify_deps_before_run=false`（无 GitHub、Supabase、Vercel 变量） |
+| **输出 Schema** | [delivery-output.schema.json](../../.ai/schemas/delivery-output.schema.json)                                |
+| **输出文件**    | `.ai/runs/delivery/result.json`                                                                             |
 
 **3. 策略 enforcement（Enforce paths and risk）**
 
@@ -266,7 +266,7 @@ test -s .ai/runs/delivery/change.patch
 ```
 
 - **`git add --intent-to-add`**：让**新文件**出现在 diff 中，避免绕过 `allowedPaths` 检查。
-- **`require-delivery-approval`**：阶段必须是 `build`，风险必须与 Contract 相同，`decision` 必须是 `APPROVE`，不能保留 P0/P1 finding、`failed` 或 `not-run`，且精确的 `pnpm verify`、`pnpm build` 都必须报告为 `passed`。
+- **`require-delivery-approval`**：阶段必须是 `build`，风险必须与 Contract 相同，`decision` 必须是 `APPROVE`，不能保留 P0/P1 finding、`failed` 或 `not-run`，且精确的 `pnpm verify` 必须报告为 `passed`。Codex Sandbox 不运行 `pnpm build`、本地服务或浏览器；这些检查由干净的 PR Gate 执行。
 - **`test -s change.patch`**：patch 必须非空，否则 build 失败。
 
 #### validate-diff.mjs 说明

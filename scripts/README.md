@@ -67,7 +67,7 @@ flowchart TD
 | [`failure-fingerprint.mjs`](ai/failure-fingerprint.mjs)             | CLI    | 从 stdin 读取失败日志，规范化后输出 SHA256 指纹与截断摘要                                                          |
 | [`classify-failure.mjs`](ai/classify-failure.mjs)                   | CLI    | 将失败日志分为 `configuration`（缺失脚本）、`infrastructure`（Runner/网络）或 `application`（业务/测试失败）       |
 | [`compose-repair-evidence.mjs`](ai/compose-repair-evidence.mjs)     | CLI    | 合并 Gate 失败日志、失败指纹与独立 Reviewer 证据，生成 Repair 使用的最小证据                                       |
-| [`require-delivery-approval.mjs`](ai/require-delivery-approval.mjs) | CLI    | 发布 Patch 前绑定阶段与 Contract 风险，拒绝 P0/P1 finding，并要求 `APPROVE`、`pnpm verify` 和 `pnpm build` 通过    |
+| [`require-delivery-approval.mjs`](ai/require-delivery-approval.mjs) | CLI    | 发布 Patch 前绑定阶段与 Contract 风险，拒绝 P0/P1 finding，并要求 `APPROVE`、`pnpm verify` 通过且无失败检查        |
 | [`lib/policy.mjs`](ai/lib/policy.mjs)                               | **库** | 加载 policy YAML；glob 转正则；`requiredRisk`、`policyViolations`、`matchesAny`                                    |
 
 ### 2.3 `scripts/controllers/`（11 个 CLI + 4 个库）
