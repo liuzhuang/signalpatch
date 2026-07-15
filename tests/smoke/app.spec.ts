@@ -94,6 +94,26 @@ test("homepage links to the mock About page", async ({ page }) => {
   await expect(page.getByText("Mock 数据", { exact: true })).toBeVisible();
 });
 
+test("About page links back to the homepage", async ({ page }) => {
+  await page.goto("/about");
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "关于我们" }),
+  ).toBeVisible();
+  await expect(page.getByText("SignalPatch", { exact: true })).toBeVisible();
+  await expect(page.getByText("Mock 数据", { exact: true })).toBeVisible();
+
+  const homeLink = page.getByRole("link", { name: "返回首页" });
+  await expect(homeLink).toBeVisible();
+  await expect(homeLink).toHaveAttribute("href", "/");
+  await homeLink.click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "SignalPatch" }),
+  ).toBeVisible();
+});
+
 test("homepage content is centered on desktop", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
