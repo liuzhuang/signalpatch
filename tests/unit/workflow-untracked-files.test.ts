@@ -41,6 +41,29 @@ describe("delivery workflow stage boundaries", () => {
     expect(delivery.on.issues.types).toEqual(["labeled"]);
     expect(delivery.on.workflow_dispatch).toBeDefined();
     expect(delivery.jobs.prepare.if).toContain("content:processed");
+    expect(delivery.concurrency.group).toContain("github.run_id");
+    expect(delivery.concurrency.group).toContain("content:processed");
+    expect(
+      delivery.jobs.prepare.steps.find(
+        (step: { id?: string }) => step.id === "context",
+      ).run,
+    ).toContain("--require-ready");
+    expect(
+      delivery.jobs["mark-codex-started"].steps.find(
+        (step: { id?: string }) => step.id === "start",
+      ).run,
+    ).toContain("issue-progress.mjs");
+    expect(
+      delivery.jobs["mark-codex-started"].steps.find(
+        (step: { id?: string }) => step.id === "start",
+      ).run,
+    ).toContain("$CONTRACT_DIGEST");
+    expect(delivery.jobs.prepare.outputs.contract_digest).toContain(
+      "contract_digest",
+    );
+    expect(delivery.jobs.build.if).toContain(
+      "needs.mark-codex-started.outputs.started == 'true'",
+    );
     const progressCheckout = delivery.jobs["mark-codex-started"].steps.find(
       (step: { uses?: string; with?: Record<string, unknown> }) =>
         String(step.uses ?? "").startsWith("actions/checkout@"),
@@ -52,9 +75,86 @@ describe("delivery workflow stage boundaries", () => {
     );
     expect(finishedCheckout?.with?.["persist-credentials"]).toBe(false);
     expect(conversationPublisher.permissions.actions).toBeUndefined();
-    expect(conversationPublisher.jobs.publish.concurrency.group).toBe(
-      "issue-publisher",
+    expect(conversationPublisher.jobs.publish.concurrency).toBeUndefined();
+  });
+
+  it("runs Manual Issue Intake from user Issue context events", () => {
+    const intake = workflow(".github/workflows/manual-issue-intake.yml");
+    const collect = intake.jobs.collect;
+    const scanStep = collect.steps.find(
+      (step: { id?: string }) => step.id === "scan",
     );
+    const scan = scanStep.run as string;
+
+    expect(intake.on.schedule).toBeUndefined();
+    expect(intake.on.issues.types).toEqual([
+      "opened",
+      "edited",
+      "labeled",
+      "reopened",
+    ]);
+    expect(intake.on.issue_comment.types).toEqual([
+      "created",
+      "edited",
+      "deleted",
+    ]);
+    expect(intake.on.workflow_dispatch).toBeDefined();
+    expect(intake.concurrency.group).toContain("github.event.issue.number");
+    expect(intake.concurrency.group).toContain("github.run_id");
+    expect(intake.concurrency.group).toContain("source:manual");
+    expect(intake.concurrency.group).toContain("content:raw");
+    expect(intake.concurrency["cancel-in-progress"]).toBe(false);
+    expect(collect.if).toContain("content:raw");
+    expect(collect.if).toContain("content:processed");
+    expect(collect.if).toContain("duplicate");
+    expect(collect.if).toContain("comment.user.type != 'Bot'");
+    expect(collect.if).toContain("github.event.sender.type != 'Bot'");
+    expect(collect.if).toContain("github.event.issue.pull_request == null");
+    expect(collect.if).toContain("signalpatch-feedback:");
+    expect(collect.if).toContain("signalpatch-conversation-request:");
+    expect(collect.if).toContain("source:manual");
+    expect(scan).toContain("github.event.issue.number");
+    expect(scanStep.env.SIGNALPATCH_EVENT_ACTION).toContain(
+      "github.event.action",
+    );
+    expect(scanStep.env.SIGNALPATCH_APP_BOT).toContain(
+      "vars.SIGNALPATCH_APP_BOT",
+    );
+    expect(intake.jobs.publish.concurrency).toBeUndefined();
+  });
+
+  it("lets Intake infer implementation details for actionable product feedback", () => {
+    const skill = readFileSync(".agents/skills/issue-intake/SKILL.md", "utf8");
+    const evidence = readFileSync(
+      ".agents/skills/issue-intake/references/evidence.md",
+      "utf8",
+    );
+
+    expect(skill).toContain(
+      "Use `NEEDS_EVIDENCE` only when the input is not product feedback",
+    );
+    expect(skill).toContain("smallest reasonable repository-derived defaults");
+    expect(evidence).toContain("官网首页的元素进行居中展示");
+    expect(evidence).toContain("return `SPEC_READY` without asking");
+  });
+
+  it("binds Feedback publication and Delivery to the exact source reference", () => {
+    const publisher = readFileSync(
+      "scripts/controllers/intake-publish.mjs",
+      "utf8",
+    );
+    const preparation = readFileSync(
+      "scripts/controllers/prepare-issue.mjs",
+      "utf8",
+    );
+
+    expect(publisher).toContain(
+      "contract.source.references[0] !== state.reference",
+    );
+    expect(preparation).toContain(
+      "signalpatch-feedback:${contract.source.references[0]}",
+    );
+    expect(preparation).toContain('"conversation:explicit-user-confirmation"');
   });
 
   it("keeps manual R2 PRs in the owner-only codex lane", () => {

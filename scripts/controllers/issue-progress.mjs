@@ -2,8 +2,10 @@
 // 【做什么】更新 Issue Delivery 的可见状态，并复用一条评论记录 Codex 开始/结束时间
 // 【何时跑】Issue Delivery 的 Controller Job；Codex 进程本身不接触 GitHub 凭据
 import { fileURLToPath } from "node:url";
+import { appendFile } from "node:fs/promises";
 
 import { requestJson, requireEnvironment } from "./lib/http.mjs";
+import { claimIssueForDelivery } from "./lib/issue-lifecycle.mjs";
 
 export const progressMarker = "<!-- signalpatch-delivery-progress -->";
 
@@ -81,61 +83,108 @@ async function updateLabels(repository, token, issueNumber, add, remove) {
   });
 }
 
-async function upsertProgressComment(repository, token, issueNumber, body) {
-  const existing = (await listComments(repository, token, issueNumber)).find(
-    (comment) => comment.body?.includes(progressMarker),
+export function trustedProgressComment(comments, trustedBotLogin) {
+  return comments.find(
+    (comment) =>
+      comment.user?.type === "Bot" &&
+      comment.user?.login === trustedBotLogin &&
+      comment.body?.includes(progressMarker),
+  );
+}
+
+async function upsertProgressComment(
+  repository,
+  token,
+  issueNumber,
+  body,
+  trustedBotLogin,
+) {
+  const existing = trustedProgressComment(
+    await listComments(repository, token, issueNumber),
+    trustedBotLogin,
   );
   const url = existing
     ? `https://api.github.com/repos/${repository}/issues/comments/${existing.id}`
     : `${issueUrl(repository, issueNumber)}/comments`;
-  return requestJson(url, {
+  const comment = await requestJson(url, {
     method: existing ? "PATCH" : "POST",
     headers: headers(token),
     body: JSON.stringify({ body }),
   });
+  if (comment.user?.type !== "Bot" || comment.user?.login !== trustedBotLogin) {
+    throw new Error("Delivery progress was not written by the trusted App Bot");
+  }
+  return comment;
 }
 
 async function main() {
-  const [phase, issueNumber, result = "success"] = process.argv.slice(2);
+  const [phase, issueNumber, detail = "success"] = process.argv.slice(2);
   if (!phase || !issueNumber || !["start", "end"].includes(phase)) {
     throw new Error(
-      "Usage: issue-progress.mjs <start|end> <issue-number> [success|failure|cancelled]",
+      "Usage: issue-progress.mjs start <issue-number> <contract-digest> | end <issue-number> [success|failure|cancelled]",
     );
   }
-  const { GH_TOKEN, GITHUB_REPOSITORY } = requireEnvironment([
-    "GH_TOKEN",
-    "GITHUB_REPOSITORY",
-  ]);
+  const { GH_TOKEN, GITHUB_REPOSITORY, SIGNALPATCH_APP_BOT } =
+    requireEnvironment([
+      "GH_TOKEN",
+      "GITHUB_REPOSITORY",
+      "SIGNALPATCH_APP_BOT",
+    ]);
   const runId = process.env.GITHUB_RUN_ID ?? "unknown";
   const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
   const runUrl = `${serverUrl}/${GITHUB_REPOSITORY}/actions/runs/${runId}`;
   const now = new Date().toISOString();
 
   if (phase === "start") {
-    await updateLabels(
-      GITHUB_REPOSITORY,
-      GH_TOKEN,
+    if (!/^[0-9a-f]{64}$/i.test(detail)) {
+      throw new Error("start requires the prepared Contract SHA-256 digest");
+    }
+    const claim = await claimIssueForDelivery({
+      repository: GITHUB_REPOSITORY,
+      token: GH_TOKEN,
       issueNumber,
-      ["ai:building"],
-      ["ai:ready", "ai:verifying", "ai:repairing", "ai:human-required"],
-    );
-    await upsertProgressComment(
-      GITHUB_REPOSITORY,
-      GH_TOKEN,
-      issueNumber,
-      progressComment({ startedAt: now, runUrl }),
-    );
+      expectedContractDigest: detail.toLowerCase(),
+      trustedBotLogin: SIGNALPATCH_APP_BOT,
+    });
+    if (process.env.GITHUB_OUTPUT) {
+      await appendFile(
+        process.env.GITHUB_OUTPUT,
+        `started=${String(claim.started)}\n`,
+      );
+    }
+    if (!claim.started) {
+      process.stdout.write(
+        `${JSON.stringify({ phase, issueNumber, started: false, reason: claim.reason, timestamp: now })}\n`,
+      );
+      return;
+    }
+    try {
+      await upsertProgressComment(
+        GITHUB_REPOSITORY,
+        GH_TOKEN,
+        issueNumber,
+        progressComment({ startedAt: now, runUrl }),
+        SIGNALPATCH_APP_BOT,
+      );
+    } catch (error) {
+      await updateLabels(
+        GITHUB_REPOSITORY,
+        GH_TOKEN,
+        issueNumber,
+        ["ai:human-required"],
+        ["ai:building", "ai:ready"],
+      );
+      throw error;
+    }
   } else {
     const comments = await listComments(
       GITHUB_REPOSITORY,
       GH_TOKEN,
       issueNumber,
     );
-    const progress = comments.find((comment) =>
-      comment.body?.includes(progressMarker),
-    );
+    const progress = trustedProgressComment(comments, SIGNALPATCH_APP_BOT);
     const startedAt = extractStartedAt(progress?.body ?? "");
-    const successful = result === "success";
+    const successful = detail === "success";
     await updateLabels(
       GITHUB_REPOSITORY,
       GH_TOKEN,
@@ -150,14 +199,15 @@ async function main() {
       progressComment({
         startedAt,
         finishedAt: now,
-        result,
+        result: detail,
         runUrl,
       }),
+      SIGNALPATCH_APP_BOT,
     );
   }
 
   process.stdout.write(
-    `${JSON.stringify({ phase, issueNumber, result, timestamp: now })}\n`,
+    `${JSON.stringify({ phase, issueNumber, result: detail, timestamp: now })}\n`,
   );
 }
 

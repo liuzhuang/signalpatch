@@ -54,7 +54,20 @@ async function ghAccess() {
       ["auth", "token", "--hostname", "github.com"],
       { encoding: "utf8", timeout: 5_000 },
     );
-    return { repository, token: token.trim() || null };
+    let trustedBotLogin = process.env.SIGNALPATCH_APP_BOT ?? "";
+    if (!trustedBotLogin) {
+      const { stdout } = await execFileAsync(
+        "gh",
+        ["variable", "get", "SIGNALPATCH_APP_BOT", "--repo", repository],
+        { encoding: "utf8", timeout: 5_000 },
+      );
+      trustedBotLogin = stdout.trim();
+    }
+    return {
+      repository,
+      token: token.trim() || null,
+      trustedBotLogin: trustedBotLogin || null,
+    };
   } catch {
     return null;
   }
@@ -75,6 +88,7 @@ async function publishDirectly() {
     token: access.token,
     contract: request.contract,
     idempotencyMarker: `signalpatch-conversation-request:${request.requestId}`,
+    trustedBotLogin: access.trustedBotLogin,
   });
   return result;
 }
