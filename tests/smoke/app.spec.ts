@@ -209,6 +209,61 @@ test("Feedback submission guidance is visible on desktop and mobile", async ({
   }
 });
 
+test("Feedback character count updates, enforces the limit, and resets after submission", async ({
+  page,
+}) => {
+  await page.route("**/api/feedback", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        trackingId: "00000000-0000-4000-8000-000000000041",
+        repairStatus: "RECEIVED",
+      },
+      status: 201,
+    });
+  });
+
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    const textarea = page.getByLabel("问题或建议");
+    const count = page.getByLabel("Feedback 字数");
+    await expect(count).toHaveText("0 / 2000");
+    await expect(count).toBeVisible();
+
+    await textarea.fill("123456789012");
+    await expect(count).toHaveText("12 / 2000");
+
+    await textarea.fill("a".repeat(2001));
+    await expect(textarea).toHaveValue("a".repeat(2000));
+    await expect(count).toHaveText("2000 / 2000");
+
+    const [textareaBox, countBox] = await Promise.all([
+      textarea.boundingBox(),
+      count.boundingBox(),
+    ]);
+    expect(textareaBox).not.toBeNull();
+    expect(countBox).not.toBeNull();
+    expect(countBox!.y).toBeGreaterThanOrEqual(
+      textareaBox!.y + textareaBox!.height,
+    );
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+
+    await page.getByRole("button", { name: "获取 Tracking ID" }).click();
+    await expect(count).toHaveText("0 / 2000");
+  }
+});
+
 test("homepage content remains centered without overflow on mobile", async ({
   page,
 }) => {
