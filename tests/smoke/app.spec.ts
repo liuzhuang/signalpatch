@@ -157,6 +157,37 @@ test("homepage content is centered on desktop", async ({ page }) => {
   }
 });
 
+test("Feedback submission guidance is visible on desktop and mobile", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    const guidance = page
+      .locator(".panel-heading")
+      .filter({ has: page.getByRole("heading", { name: "提交 Feedback" }) })
+      .locator("h2 + p");
+    await expect(guidance).toHaveText(
+      "无需登录，提交后会获得 Tracking ID，可随时查询处理状态。",
+    );
+    await expect(guidance).toBeVisible();
+
+    if (viewport.width === 390) {
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <=
+            document.documentElement.clientWidth,
+        ),
+      ).toBe(true);
+    }
+  }
+});
+
 test("homepage content remains centered without overflow on mobile", async ({
   page,
 }) => {
