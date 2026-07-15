@@ -2,7 +2,7 @@
 
 每个 PR 必须依次通过 `pnpm install --frozen-lockfile`、`pnpm verify` 和 `pnpm build`。`pnpm verify` 固定执行 Prettier Check、ESLint、TypeScript Type Check 和 Vitest。
 
-Builder 和 Repair 必须先在 Codex CLI 中运行针对性 Validator、`pnpm verify` 和 `pnpm build`。Controller 只接受阶段与 Contract 风险一致、无 P0/P1 finding、`decision=APPROVE` 且两条固定命令均为 `passed` 的结构化结果，其他结果不得生成 Patch。PR Gate 随后在干净的 Ubuntu Checkout 中独立复跑 `pnpm verify` 和 `pnpm build`；Codex 预检不能替代这次复验。依赖 Preview 或 Production 的 Validator 仍由后续 Controller Job 执行，不在 Builder 或 Repair 中伪报为 `not-run`。
+Builder 和 Repair 必须先在 Codex CLI 中运行不依赖本地服务、浏览器或 Sandbox 网络的针对性 Validator，以及 `pnpm verify`。Controller 只接受阶段与 Contract 风险一致、无 P0/P1 finding、`decision=APPROVE`、`pnpm verify=passed` 且不包含 `failed` 或 `not-run` 的结构化结果，其他结果不得生成 Patch。Codex Sandbox 不运行 `pnpm build`，也不启动本地服务或浏览器；其进程设置 `pnpm_config_verify_deps_before_run=false`，复用 Controller 已完成的依赖安装，避免 pnpm 在无网络 Sandbox 中自行重装。PR Gate 在干净的 Ubuntu Checkout 中独立执行 `pnpm verify`、`pnpm build` 和 Preview Smoke，Production Validator 由 PR Outcome 执行。Codex 预检只提前阻断已知失败，不能替代这些独立门禁。
 
 Vercel Preview 连接测试用 Supabase 环境，使用 `pnpm test:smoke -- --base-url="$PREVIEW_URL"` 验证匿名提交 Feedback、获得 Tracking ID 和查询 Repair Status。Preview 通过后提升同一个 Deployment 到 Production，并使用相同命令验证生产地址。
 

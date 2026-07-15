@@ -228,9 +228,11 @@ node scripts/ai/render-prompt.mjs --stage repair \
 # Codex workspace-write → repair.json
 ```
 
+Repair 的 `env -i` 仅保留 `HOME`、`PATH` 和 `pnpm_config_verify_deps_before_run=false`。最后一项让 pnpm 复用 Workflow 已安装的依赖，避免在无网络 Sandbox 中自动重装。
+
 **3. Validate Repair patch**
 
-同 issue-delivery build：先用 `validate-json` 校验结构，再由 `require-delivery-approval.mjs repair contract.json repair.json` 确认阶段与 Contract 风险一致、没有 P0/P1 finding、Codex 报告 `APPROVE`，且精确的 `pnpm verify`、`pnpm build` 都已通过；然后执行 `validate-diff`、`git diff` → `repair.patch`，`test -s` 非空。
+同 issue-delivery build：先用 `validate-json` 校验结构，再由 `require-delivery-approval.mjs repair contract.json repair.json` 确认阶段与 Contract 风险一致、没有 P0/P1 finding、Codex 报告 `APPROVE`，且精确的 `pnpm verify` 已通过、没有 `failed` 或 `not-run`；然后执行 `validate-diff`、`git diff` → `repair.patch`，`test -s` 非空。`pnpm build` 与浏览器验收由新 Head 触发的干净 PR Gate 执行。
 
 #### 输入 / 输出
 

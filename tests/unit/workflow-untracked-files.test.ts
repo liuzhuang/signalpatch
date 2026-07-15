@@ -259,10 +259,41 @@ describe("delivery workflow stage boundaries", () => {
     );
 
     expect(sharedGuidance).toContain(
-      "Do not return `APPROVE` until `pnpm verify` and `pnpm build` both pass",
+      "Do not return `APPROVE` until `pnpm verify` passes",
     );
-    expect(sharedGuidance).toContain("separate verification entries");
+    expect(sharedGuidance).toContain("Do not run `pnpm build`");
+    expect(sharedGuidance).toContain("start a local server");
     expect(repairGuidance).toContain("narrowest reproducible validator");
+  });
+
+  it.each([
+    [".github/workflows/issue-delivery.yml", "build", "Build with Codex"],
+    [".github/workflows/pr-outcome.yml", "repair", "Repair with Codex"],
+  ])(
+    "keeps pnpm from reinstalling dependencies inside %s",
+    (path, job, name) => {
+      const script = stepScript(path, job, name);
+
+      expect(script).toContain("env -i");
+      expect(script).toContain("pnpm_config_verify_deps_before_run=false");
+      expect(script).toContain("--sandbox workspace-write");
+    },
+  );
+
+  it("keeps deployment proof in the clean PR Gate", () => {
+    expect(
+      stepScript(".github/workflows/pr-gate.yml", "verify", "Verify"),
+    ).toContain("pnpm verify");
+    expect(
+      stepScript(".github/workflows/pr-gate.yml", "build", "Build"),
+    ).toContain("pnpm build");
+    expect(
+      stepScript(
+        ".github/workflows/pr-gate.yml",
+        "preview-smoke",
+        "Smoke test staged deployment",
+      ),
+    ).toContain("pnpm test:smoke");
   });
 
   it("passes structured Reviewer findings into Repair without tracking pnpm cache files", () => {

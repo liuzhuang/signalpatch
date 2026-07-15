@@ -10,7 +10,7 @@ Use a `workspace-write` sandbox with no external write credentials.
 1. Reproduce the actual behavior.
 2. Add or update one acceptance test at a public seam.
 3. Implement the smallest change that satisfies the current criterion.
-4. Run the validator named by the criterion, then follow the shared verification rule.
+4. Run criterion validators that do not require a local server, browser, or Sandbox network access, then follow the shared verification rule. Add runtime coverage to the test suite, but leave its execution to the Controller acceptance jobs.
 5. Report changed paths, command results, residual risks, and any risk escalation.
 
 Do not broaden the product, refactor unrelated code, or edit Workflow, Skill, Prompt, policy, dependency, or migration files unless the Issue is already classified R2 and awaiting human approval.

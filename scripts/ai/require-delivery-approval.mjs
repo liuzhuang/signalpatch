@@ -69,7 +69,7 @@ export async function assertPublishableDeliveryResult(
       `delivery result verification must not contain failed or not-run checks: ${details}`,
     );
   }
-  for (const command of ["pnpm verify", "pnpm build"]) {
+  for (const command of ["pnpm verify"]) {
     const passed = result.verification.some(
       (entry) => entry.command === command && entry.status === "passed",
     );
