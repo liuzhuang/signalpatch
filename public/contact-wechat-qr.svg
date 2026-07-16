@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" role="img" aria-labelledby="title desc">
+  <title id="title">Mock 微信二维码</title>
+  <desc id="desc">仅用于界面演示，无法扫码</desc>
+  <rect width="240" height="240" fill="#fff"/>
+  <g fill="#16181d">
+    <path d="M20 20h64v64H20zm12 12v40h40V32zM156 20h64v64h-64zm12 12v40h40V32zM20 156h64v64H20zm12 12v40h40v-40z"/>
+    <path d="M104 20h16v16h-16zm24 0h16v32h-16zm-24 40h40v16h-40zm0 28h16v28h-16zm24 0h16v16h-16zm28 0h16v28h-16zm24 0h40v16h-40zm-76 40h40v16h-40zm52 0h16v16h-16zm24 0h40v16h-40zm-76 28h16v16h-16zm24 0h44v16h-44zm60 0h32v16h-32zm-84 28h40v16h-40zm52 0h16v36h-16zm24 0h16v16h-16zm24 0h16v36h-16zm-76 24h16v12h-16zm52 0h16v12h-16z"/>
+  </g>
+  <rect x="72" y="102" width="96" height="36" rx="4" fill="#fff" stroke="#d84522" stroke-width="4"/>
+  <text x="120" y="125" fill="#d84522" font-family="system-ui, sans-serif" font-size="16" font-weight="700" text-anchor="middle">MOCK</text>
+</svg>
