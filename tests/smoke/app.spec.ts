@@ -323,6 +323,42 @@ test("homepage content remains centered without overflow on mobile", async ({
   ).toBe(true);
 });
 
+test("homepage contact dialog shows and closes on desktop and mobile", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    const trigger = page.getByRole("button", { name: "联系我" });
+    await expect(trigger).toBeVisible();
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "微信二维码" });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("img", { name: /Mock.*微信二维码/ }),
+    ).toHaveAttribute("src", "/contact-wechat-qr.svg");
+
+    await dialog.getByRole("button", { name: "关闭" }).click();
+    await expect(dialog).toBeHidden();
+
+    await trigger.click();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  }
+});
+
 test("homepage links to a responsive gallery with 20 mock images", async ({
   page,
 }) => {

@@ -1,4 +1,5 @@
 import { FeedbackForm } from "@/components/feedback-form";
+import { ContactDialog } from "@/components/contact-dialog";
 import { RandomCopy } from "@/components/random-copy";
 import { StatusForm } from "@/components/status-form";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -46,6 +47,7 @@ export default function Home() {
         <span>
           <Link href="/gallery">相册</Link>
         </span>
+        <ContactDialog />
         <a href="https://github.com/liuzhuang/signalpatch">查看公开仓库</a>
       </footer>
     </main>

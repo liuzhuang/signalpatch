@@ -352,9 +352,54 @@ footer {
   text-align: center;
 }
 
-footer a {
+footer a,
+.contact-trigger {
   color: var(--footer-link);
   text-decoration: none;
+}
+
+.contact-trigger {
+  padding: 0;
+  background: transparent;
+  font: inherit;
+}
+
+.contact-dialog {
+  width: min(360px, calc(100% - 32px));
+  max-width: none;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--foreground);
+}
+
+.contact-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.contact-dialog-content {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  padding: 28px;
+  text-align: center;
+}
+
+.contact-dialog-content h2,
+.contact-dialog-content p,
+.contact-dialog-content form {
+  margin: 0;
+}
+
+.contact-dialog-content p {
+  color: var(--muted);
+}
+
+.contact-qr {
+  width: min(240px, 100%);
+  height: auto;
+  border: 1px solid var(--line);
 }
 
 .gallery-header,
