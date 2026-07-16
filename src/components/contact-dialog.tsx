@@ -7,7 +7,7 @@ export function ContactDialog() {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   return (
-    <>
+    <div>
       <button
         className="contact-trigger"
         onClick={() => dialogRef.current?.showModal()}
@@ -35,6 +35,6 @@ export function ContactDialog() {
           </form>
         </div>
       </dialog>
-    </>
+    </div>
   );
 }
